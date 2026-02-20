@@ -63,7 +63,7 @@ function ActivityRow({ conv }: { conv: ConversationSummary }) {
   })();
 
   return (
-    <div className="flex items-start gap-3 border-b border-glass-border py-3 last:border-0">
+    <div className="flex items-start gap-3 py-3 last:border-0" style={{ borderBottom: "1px solid var(--border)" }}>
       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
         <svg
           width="12"
@@ -167,7 +167,7 @@ export default function DashboardPage() {
             health?.status === "ok"
               ? "border-success/25 bg-success/5 text-success"
               : loading
-                ? "border-glass-border bg-glass-bg text-foreground-muted"
+                ? "text-foreground-muted"
                 : "border-error/25 bg-error/5 text-error"
           }`}
         >
@@ -191,7 +191,7 @@ export default function DashboardPage() {
             Backend unreachable: {error}
           </p>
           <p className="mt-1 text-xs text-foreground-muted">
-            Ensure <code className="rounded bg-white/5 px-1 py-0.5 font-mono">docker-compose up</code> is running
+            Ensure <code className="rounded px-1 py-0.5 font-mono" style={{ background: "var(--surface-overlay)" }}>docker-compose up</code> is running
           </p>
         </GlassCard>
       )}
@@ -359,7 +359,7 @@ export default function DashboardPage() {
                   </p>
                   <p className="mt-0.5 text-xs text-foreground-muted">
                     Run backend with{" "}
-                    <code className="rounded bg-white/5 px-1 font-mono text-[11px] text-accent-light">
+                    <code className="rounded px-1 font-mono text-[11px] text-accent-light" style={{ background: "var(--surface-overlay)" }}>
                       ddtrace-run
                     </code>{" "}
                     to enable auto-instrumented LLM spans
@@ -401,10 +401,10 @@ export default function DashboardPage() {
               <div className="space-y-3 py-2">
                 {[...Array(4)].map((_, i) => (
                   <div key={i} className="flex gap-3">
-                    <div className="h-7 w-7 rounded-lg bg-white/5" />
+                    <div className="h-7 w-7 rounded-lg" style={{ background: "var(--surface-hover)" }} />
                     <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-3/4 rounded bg-white/5" />
-                      <div className="h-2.5 w-1/2 rounded bg-white/5" />
+                      <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-hover)" }} />
+                      <div className="h-2.5 w-1/2 rounded" style={{ background: "var(--surface-hover)" }} />
                     </div>
                   </div>
                 ))}
@@ -441,7 +441,10 @@ export default function DashboardPage() {
                 ))}
                 <a
                   href="/chat"
-                  className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-white/4 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
+                  className="mt-3 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors"
+                  style={{ background: "var(--surface-hover)", color: "var(--foreground-muted)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
                 >
                   Open Chat
                   <svg

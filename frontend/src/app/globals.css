@@ -1,22 +1,87 @@
 @import "tailwindcss";
 
+/* ============================================================
+   LIGHT THEME (default — Claude.ai aesthetic)
+   ============================================================ */
 :root {
+  /* Surfaces */
+  --surface: #f7f7f5;
+  --surface-raised: #ffffff;
+  --surface-overlay: #eeede9;
+
+  /* Text */
+  --foreground: #1a1a1a;
+  --foreground-muted: #6b6b6b;
+
+  /* Accent — indigo, richer for light bg */
+  --accent: #5755d9;
+  --accent-light: #7573e6;
+
+  /* Borders */
+  --border: #e4e3df;
+  --border-focus: rgba(87, 85, 217, 0.35);
+
+  /* Cards / glass */
+  --card-bg: #ffffff;
+  --card-border: #e4e3df;
+
+  /* Interactive */
+  --surface-hover: rgba(0, 0, 0, 0.04);
+  --surface-active: rgba(0, 0, 0, 0.07);
+
+  /* Messaging */
+  --user-bubble: #eceae5;
+  --user-bubble-text: #1a1a1a;
+
+  /* Semantic */
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================================
+   DARK THEME
+   ============================================================ */
+.dark {
   --surface: #0a0a0f;
-  --surface-raised: #12121a;
-  --surface-overlay: #1a1a25;
+  --surface-raised: #111118;
+  --surface-overlay: #18181f;
+
   --foreground: #e4e4e7;
   --foreground-muted: #71717a;
+
   --accent: #6366f1;
   --accent-light: #818cf8;
-  --accent-glow: rgba(99, 102, 241, 0.15);
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-hover: rgba(255, 255, 255, 0.06);
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-focus: rgba(99, 102, 241, 0.4);
+
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(255, 255, 255, 0.09);
+
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --surface-active: rgba(255, 255, 255, 0.09);
+
+  --user-bubble: rgba(99, 102, 241, 0.13);
+  --user-bubble-text: #e4e4e7;
+
   --success: #22c55e;
   --warning: #eab308;
   --error: #ef4444;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* ============================================================
+   TAILWIND v4 THEME TOKENS
+   ============================================================ */
 @theme inline {
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
@@ -25,35 +90,38 @@
   --color-foreground-muted: var(--foreground-muted);
   --color-accent: var(--accent);
   --color-accent-light: var(--accent-light);
-  --color-accent-glow: var(--accent-glow);
-  --color-glass-bg: var(--glass-bg);
-  --color-glass-border: var(--glass-border);
-  --color-glass-hover: var(--glass-hover);
+  --color-border: var(--border);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-user-bubble: var(--user-bubble);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-error: var(--error);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --animate-fade-in: fadeIn 0.5s ease-out forwards;
-  --animate-slide-up: slideUp 0.4s ease-out forwards;
-  --animate-pulse-glow: pulseGlow 2s ease-in-out infinite;
+  --animate-fade-in: fadeIn 0.45s ease-out forwards;
+  --animate-slide-up: slideUp 0.35s ease-out forwards;
 
   @keyframes fadeIn {
-    0% { opacity: 0; }
-    100% { opacity: 1; }
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
   @keyframes slideUp {
-    0% { opacity: 0; transform: translateY(12px); }
-    100% { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.08); }
-    50% { box-shadow: 0 0 30px rgba(99, 102, 241, 0.18); }
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 }
 
-* {
+/* Enable class-based dark variant */
+@variant dark (&.dark, .dark &);
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*, *::before, *::after {
   box-sizing: border-box;
 }
 
@@ -62,28 +130,26 @@ html {
 }
 
 body {
-  background: var(--surface);
+  background-color: var(--surface);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.3);
-  color: #fff;
+  background: rgba(87, 85, 217, 0.2);
+  color: var(--foreground);
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--foreground-muted);
+  opacity: 0.4;
 }
