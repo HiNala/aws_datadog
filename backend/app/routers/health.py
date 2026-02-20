@@ -219,8 +219,37 @@ def test_keys_live():
         except Exception as e:
             return {"status": "error", "error": str(e)[:80]}
 
+    # ── MiniMax M2.5 Chat ─────────────────────────────────────────────────────
+    def test_minimax_chat() -> dict:
+        if not settings.minimax_api_key:
+            return {"status": "error", "error": "No API key"}
+        try:
+            import anthropic
+            client = anthropic.Anthropic(
+                base_url="https://api.minimax.io/anthropic",
+                api_key=settings.minimax_api_key,
+            )
+            t0 = time.time()
+            resp = client.messages.create(
+                model="MiniMax-M2.5-highspeed",
+                max_tokens=10,
+                messages=[{"role": "user", "content": [{"type": "text", "text": "Say OK"}]}],
+            )
+            ms = round((time.time() - t0) * 1000)
+            text_out = ""
+            for b in resp.content:
+                if hasattr(b, "text"):
+                    text_out += b.text
+            return {
+                "status": "ok", "model": "MiniMax-M2.5-highspeed",
+                "latency_ms": ms, "response": text_out.strip()[:25],
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)[:80]}
+
     results["bedrock"] = test_bedrock()
-    results["minimax"] = test_minimax()
+    results["minimax_tts"] = test_minimax()
+    results["minimax_llm"] = test_minimax_chat()
     results["datadog"] = test_datadog()
     results["postgres"] = test_postgres()
 

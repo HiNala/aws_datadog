@@ -15,6 +15,7 @@ from app.models import (
     TokenUsage,
 )
 from app.services.bedrock import BedrockService
+from app.services.minimax_chat import MiniMaxChat
 from app.services.datadog_obs import (
     annotate,
     annotate_llm_call,
@@ -26,6 +27,7 @@ logger = logging.getLogger("opsvoice.chat")
 router = APIRouter(prefix="/api", tags=["chat"])
 
 _bedrock: BedrockService | None = None
+_minimax: MiniMaxChat | None = None
 
 
 def _get_bedrock() -> BedrockService:
@@ -35,22 +37,58 @@ def _get_bedrock() -> BedrockService:
     return _bedrock
 
 
+def _get_minimax() -> MiniMaxChat:
+    global _minimax
+    if _minimax is None:
+        _minimax = MiniMaxChat(get_settings())
+    return _minimax
+
+
+def _infer(messages: list[dict]) -> dict:
+    """
+    Try LLM providers in order:
+      1. AWS Bedrock — Claude Sonnet 4 (primary, if creds work)
+      2. MiniMax M2.5-highspeed — 100 tps, Anthropic-compatible (fallback)
+    """
+    settings = get_settings()
+    errors: list[str] = []
+
+    # 1. Bedrock (only attempt if credentials are actually configured)
+    has_aws = (
+        bool(settings.aws_bearer_token_bedrock)
+        or bool(settings.aws_access_key_id and settings.aws_secret_access_key)
+        or bool(settings.aws_bedrock_api_key_backup)
+    )
+    if has_aws:
+        try:
+            return _get_bedrock().invoke(messages)
+        except Exception as e:
+            logger.warning("Bedrock failed, trying MiniMax M2.5: %s", str(e)[:100])
+            errors.append(f"bedrock: {str(e)[:80]}")
+
+    # 2. MiniMax M2.5 fallback
+    mm = _get_minimax()
+    if mm.is_available():
+        try:
+            return mm.invoke(messages)
+        except Exception as e:
+            errors.append(f"minimax: {str(e)[:80]}")
+
+    raise RuntimeError(
+        f"All LLM providers failed. Ensure AWS Bedrock model access is enabled "
+        f"OR MiniMax API key is configured. Details: {'; '.join(errors)}"
+    )
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    bedrock = _get_bedrock()
-
     with workflow_span("opsvoice-voice-pipeline"):
-        # Tag entire workflow at entry
         annotate(
             input_data=req.message,
-            tags={
-                "interface": req.metadata.get("interface", "http") if hasattr(req, "metadata") else "http",
-                "env": "hackathon",
-                "ml_app": "opsvoice",
-            },
+            tags={"env": "hackathon", "ml_app": "opsvoice"},
         )
 
         # ── Resolve / create conversation ─────────────────────────────────
@@ -76,16 +114,14 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         messages = [{"role": r.role, "content": r.content} for r in history_rows]
         messages.append({"role": "user", "content": req.message})
 
-        # ── Invoke Claude via Bedrock ─────────────────────────────────────
+        # ── Invoke LLM (Bedrock → MiniMax fallback) ───────────────────────
         start = time.time()
         try:
-            with task_span("bedrock-claude-invoke"):
-                result = bedrock.invoke(messages)
+            with task_span("llm-invoke"):
+                result = _infer(messages)
         except Exception as e:
-            logger.error("Bedrock invocation failed: %s", e)
-            annotate(
-                tags={"error": "bedrock_invoke_failed", "error_message": str(e)[:100]},
-            )
+            logger.error("LLM invocation failed: %s", e)
+            annotate(tags={"error": "llm_invoke_failed", "error_message": str(e)[:100]})
             raise HTTPException(status_code=502, detail=f"LLM error: {e}")
 
         latency_ms = round((time.time() - start) * 1000, 1)
@@ -95,7 +131,18 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         output_tokens  = result.get("output_tokens", 0)
         model_id       = result.get("model", "unknown")
 
-        # ── Rich LLM Obs annotation ───────────────────────────────────────
+        # Determine display provider
+        if model_id.startswith("minimax/"):
+            model_provider = "MiniMax"
+            model_display = model_id.replace("minimax/", "")
+        elif "claude" in model_id.lower():
+            model_provider = "AWS Bedrock"
+            model_display = model_id.split(".")[-1][:30] if "." in model_id else model_id
+        else:
+            model_provider = "unknown"
+            model_display = model_id
+
+        # ── Datadog LLM Observability ─────────────────────────────────────
         annotate_llm_call(
             input_messages=messages,
             output_text=response_text,
@@ -122,11 +169,11 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
             )
             db.commit()
 
-        # Final workflow annotation
         annotate(
             output_data=response_text,
             tags={
                 "model": model_id,
+                "model_provider": model_provider,
                 "conversation_id": conv_id[:8],
                 "response_chars": str(len(response_text)),
             },
@@ -139,14 +186,15 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         )
 
     logger.info(
-        "Chat complete: %d/%d tokens, %.0fms, model=%s, conv=%s",
-        input_tokens, output_tokens, latency_ms, model_id, conv_id[:8],
+        "Chat: %d/%d tokens, %.0fms, model=%s, provider=%s, conv=%s",
+        input_tokens, output_tokens, latency_ms, model_display, model_provider, conv_id[:8],
     )
 
     return ChatResponse(
         response=response_text,
         conversation_id=conv_id,
-        model=model_id,
+        model=model_display,
+        model_provider=model_provider,
         tokens=TokenUsage(input=input_tokens, output=output_tokens),
         latency_ms=latency_ms,
     )

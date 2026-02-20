@@ -10,6 +10,7 @@ export interface ChatResponse {
   response: string;
   conversation_id: string;
   model: string;
+  model_provider: string;
   tokens: { input: number; output: number };
   latency_ms: number;
 }
@@ -153,6 +154,33 @@ export async function getMetrics(): Promise<MetricsResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// Streaming TTS (speech-2.8-turbo, ~200ms first audio)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a ReadableStream of raw MP3 bytes.
+ * Use with MediaSource API for instant playback.
+ */
+export async function getTextToSpeechStream(
+  text: string,
+  voiceId?: string
+): Promise<ReadableStream<Uint8Array>> {
+  const res = await fetch(`${API_BASE}/api/tts/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice_id: voiceId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `TTS stream failed: ${res.status}`);
+  }
+
+  if (!res.body) throw new Error("No response body for TTS stream");
+  return res.body;
+}
+
+// ---------------------------------------------------------------------------
 // Live key test (calls real APIs — takes ~5-10s)
 // ---------------------------------------------------------------------------
 
@@ -172,7 +200,8 @@ export interface KeyTestResult {
 export interface KeyTestResponse {
   results: {
     bedrock: KeyTestResult;
-    minimax: KeyTestResult;
+    minimax_tts: KeyTestResult;
+    minimax_llm: KeyTestResult;
     datadog: KeyTestResult;
     postgres: KeyTestResult;
   };

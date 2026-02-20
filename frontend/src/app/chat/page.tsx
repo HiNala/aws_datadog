@@ -17,6 +17,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   model?: string;
+  modelProvider?: string;
   tokens?: { input: number; output: number };
   latencyMs?: number;
 }
@@ -56,7 +57,8 @@ function ApiKeyPanel() {
 
   const SERVICES = [
     { key: "bedrock", label: "AWS Bedrock" },
-    { key: "minimax", label: "MiniMax TTS" },
+    { key: "minimax_llm", label: "MiniMax M2.5" },
+    { key: "minimax_tts", label: "MiniMax TTS" },
     { key: "datadog", label: "Datadog" },
     { key: "postgres", label: "PostgreSQL" },
   ] as const;
@@ -312,6 +314,7 @@ export default function ChatPage() {
         role: "assistant",
         content: data.response,
         model: data.model,
+        modelProvider: data.model_provider,
         tokens: data.tokens,
         latencyMs: data.latency_ms,
       }]);
@@ -397,7 +400,7 @@ export default function ChatPage() {
                   How can I help you?
                 </h2>
                 <p className="mt-2 max-w-sm text-sm leading-relaxed" style={{ color: "var(--foreground-muted)" }}>
-                  Ask about your infrastructure, services, and incidents. Responses are powered by Claude on AWS Bedrock.
+                  Ask about your infrastructure, services, and incidents. Powered by Claude on AWS Bedrock with MiniMax M2.5 fallback.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-2">
                   {[
@@ -432,7 +435,15 @@ export default function ChatPage() {
             )}
 
             {messages.map((msg, i) => (
-              <ChatMessage key={i} role={msg.role} content={msg.content} model={msg.model} tokens={msg.tokens} latencyMs={msg.latencyMs} />
+              <ChatMessage
+                key={i}
+                role={msg.role}
+                content={msg.content}
+                model={msg.model}
+                modelProvider={msg.modelProvider}
+                tokens={msg.tokens}
+                latencyMs={msg.latencyMs}
+              />
             ))}
 
             {isLoading && (
