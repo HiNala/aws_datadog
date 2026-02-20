@@ -3,9 +3,9 @@
 import type React from "react";
 import { Iridescence } from "./iridescence";
 import { useVoiceDetection } from "@/hooks/use-voice-detection";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, useRef } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface VoiceBubbleProps {
   className?: string;
@@ -13,6 +13,8 @@ interface VoiceBubbleProps {
   isResponding?: boolean;
   responseIntensity?: number;
   onVoiceLevel?: (level: number) => void;
+  /** Called with the final transcribed text when speech ends */
+  onTranscript?: (text: string) => void;
 }
 
 export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
@@ -21,47 +23,50 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
   isResponding = false,
   responseIntensity = 0.7,
   onVoiceLevel,
+  onTranscript,
 }) => {
-  const { audioLevel, isListening, isSupported, startListening, stopListening } =
-    useVoiceDetection({
-      sensitivity: 0.06,
-      smoothing: 0.88,
-    });
+  const { audioLevel, isListening: micActive, startListening, stopListening } =
+    useVoiceDetection({ sensitivity: 0.06, smoothing: 0.88 });
+
+  const {
+    isRecording,
+    interimTranscript,
+    isSupported,
+    startRecording,
+    stopRecording,
+  } = useSpeechRecognition({ onFinal: onTranscript });
 
   const [conversationState, setConversationState] = useState<
-    "idle" | "listening" | "responding"
+    "idle" | "recording" | "listening" | "responding"
   >("idle");
-  const hasStartedRef = useRef(false);
 
-  // Auto-start listening when component mounts (only once)
+  // Start mic-level detection when recording starts (for animation)
   useEffect(() => {
-    if (!hasStartedRef.current) {
-      hasStartedRef.current = true;
-      const timer = setTimeout(() => {
-        startListening();
-      }, 100);
-      return () => clearTimeout(timer);
+    if (isRecording) {
+      startListening();
+    } else {
+      stopListening();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isRecording]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Notify parent of voice level for integration with input
   useEffect(() => {
     onVoiceLevel?.(audioLevel);
   }, [audioLevel, onVoiceLevel]);
 
-  // Determine conversation state
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       if (isResponding) {
         setConversationState("responding");
-      } else if (audioLevel > 0.1) {
+      } else if (isRecording && audioLevel > 0.1) {
         setConversationState("listening");
+      } else if (isRecording) {
+        setConversationState("recording");
       } else {
         setConversationState("idle");
       }
     }, 50);
-    return () => clearTimeout(timer);
-  }, [audioLevel, isResponding]);
+    return () => clearTimeout(t);
+  }, [audioLevel, isResponding, isRecording]);
 
   const safeAudioLevel = Math.max(0, Math.min(1, audioLevel || 0));
 
@@ -79,6 +84,13 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
       behaviorMode = 1.0;
       haloIntensity = 0.3 + safeAudioLevel * 0.7;
       break;
+    case "recording":
+      dynamicSpeed = 0.8;
+      dynamicAmplitude = 0.1;
+      bubbleScale = 1.05;
+      behaviorMode = 1.0;
+      haloIntensity = 0.35;
+      break;
     case "responding":
       dynamicSpeed = 0.8 + responseIntensity * 2.5;
       dynamicAmplitude = 0.12 + responseIntensity * 0.6;
@@ -95,35 +107,65 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
   }
 
   const handleToggle = () => {
-    if (isListening) {
-      stopListening();
+    if (!isSupported) return;
+    if (isRecording) {
+      stopRecording();
     } else {
-      startListening();
+      startRecording();
     }
   };
 
   const haloSize = size * 1.5;
 
+  const stateLabel = conversationState === "listening"
+    ? "listening"
+    : conversationState === "recording"
+    ? "ready"
+    : conversationState === "responding"
+    ? "speaking"
+    : "tap to speak";
+
+  const stateColor = conversationState === "listening"
+    ? "rgba(129,140,248,0.9)"
+    : conversationState === "recording"
+    ? "rgba(248,113,113,0.9)"
+    : conversationState === "responding"
+    ? "rgba(200,130,255,0.9)"
+    : "rgba(113,113,122,0.7)";
+
   return (
     <div
       className={cn("relative flex items-center justify-center", className)}
-      title={
-        !isSupported
-          ? "Microphone not supported"
-          : isListening
-          ? "Listening — click to mute"
-          : "Click to enable microphone"
-      }
     >
+      {/* Interim transcript pill — floats above the bubble */}
+      {interimTranscript && (
+        <div
+          className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-20
+                     whitespace-nowrap max-w-[260px] truncate
+                     rounded-full px-3 py-1 text-xs text-white/90
+                     bg-black/60 backdrop-blur-md border border-white/10
+                     shadow-lg pointer-events-none"
+        >
+          {interimTranscript}
+        </div>
+      )}
+
       <button
         onClick={handleToggle}
         disabled={!isSupported}
-        className="relative flex items-center justify-center focus:outline-none group"
+        title={
+          !isSupported
+            ? "Speech recognition not supported (use Chrome/Edge)"
+            : isRecording
+            ? "Recording — click to stop"
+            : "Click to speak"
+        }
+        className="relative flex items-center justify-center focus:outline-none group cursor-pointer disabled:cursor-not-allowed"
         style={{ width: haloSize, height: haloSize }}
       >
         {/* Outer halo glow */}
         <div
-          className="absolute inset-0 rounded-full transition-all duration-500 ease-out pointer-events-none"
+          className="absolute inset-0 rounded-full pointer-events-none transition-all duration-500 ease-out"
           style={{
             background: `radial-gradient(circle,
               rgba(100, 150, 255, ${haloIntensity * 0.35}) 0%,
@@ -132,7 +174,6 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
               transparent 85%)`,
             filter: `blur(${6 + haloIntensity * 10}px)`,
             transform: `scale(${1 + haloIntensity * 0.25})`,
-            transition: "all 0.5s ease-out",
           }}
         />
 
@@ -165,26 +206,19 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
           />
         </div>
 
-        {/* Mic icon overlay — shown when idle/not supported */}
-        {!isListening && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div
-              className="rounded-full flex items-center justify-center"
-              style={{ width: size * 0.4, height: size * 0.4 }}
-            >
-              <MicOff
-                className="text-white/60 group-hover:text-white/90 transition-colors"
-                style={{ width: size * 0.22, height: size * 0.22 }}
-              />
-            </div>
-          </div>
+        {/* Recording pulse ring — red while recording */}
+        {isRecording && (
+          <div
+            className="absolute rounded-full border-2 border-red-400/50 animate-ping pointer-events-none"
+            style={{ width: size + 10, height: size + 10 }}
+          />
         )}
 
-        {/* Active listening ring pulse */}
-        {conversationState === "listening" && (
+        {/* Responding pulse ring — indigo */}
+        {conversationState === "responding" && (
           <div
             className="absolute rounded-full border-2 border-indigo-400/40 animate-ping pointer-events-none"
-            style={{ width: size + 8, height: size + 8 }}
+            style={{ width: size + 10, height: size + 10 }}
           />
         )}
 
@@ -194,23 +228,10 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
           style={{ bottom: -18, left: "50%", transform: "translateX(-50%)" }}
         >
           <span
-            className="whitespace-nowrap text-[9px] font-medium tracking-wide uppercase"
-            style={{
-              color:
-                conversationState === "listening"
-                  ? "rgba(129,140,248,0.9)"
-                  : conversationState === "responding"
-                  ? "rgba(200,130,255,0.9)"
-                  : "rgba(113,113,122,0.7)",
-            }}
+            className="whitespace-nowrap text-[9px] font-medium tracking-wide uppercase transition-colors duration-300"
+            style={{ color: stateColor }}
           >
-            {conversationState === "listening"
-              ? "listening"
-              : conversationState === "responding"
-              ? "speaking"
-              : isListening
-              ? "idle"
-              : "muted"}
+            {stateLabel}
           </span>
         </div>
       </button>

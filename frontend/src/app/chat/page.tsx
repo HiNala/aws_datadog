@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
   ChatInput,
   ChatInputTextArea,
@@ -13,6 +12,7 @@ import {
   sendChatMessage,
   listConversations,
   getConversationMessages,
+  getTextToSpeech,
   type ChatResponse,
   type ConversationSummary,
 } from "@/lib/api";
@@ -106,13 +106,11 @@ function ConversationSidebar({
           {
             href: "https://app.datadoghq.com/llm/traces",
             label: "LLM Traces",
-            sub: "Datadog",
             dot: "#9b4dca",
           },
           {
             href: "https://app.datadoghq.com/dashboard/lists",
             label: "Dashboards",
-            sub: "Datadog",
             dot: "#9b4dca",
           },
         ].map((link) => (
@@ -146,11 +144,14 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inputValue, setInputValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -195,7 +196,42 @@ export default function ChatPage() {
   const handleNew = useCallback(() => {
     setMessages([]);
     setConversationId(null);
+    setCurrentModel(null);
     setError(null);
+    // Stop any playing TTS
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      setIsTTSPlaying(false);
+    }
+  }, []);
+
+  /** Auto-play TTS for an assistant response */
+  const playTTS = useCallback(async (text: string) => {
+    // Stop previous TTS if any
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+    }
+    setIsTTSPlaying(true);
+    try {
+      const audioBuffer = await getTextToSpeech(text);
+      const blob = new Blob([audioBuffer], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsTTSPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setIsTTSPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
+    } catch {
+      // TTS failure is non-fatal — user can still read the response
+      setIsTTSPlaying(false);
+    }
   }, []);
 
   const handleSend = useCallback(
@@ -211,17 +247,21 @@ export default function ChatPage() {
       try {
         const data: ChatResponse = await sendChatMessage(finalText, conversationId);
         setConversationId(data.conversation_id);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: data.response,
-            model: data.model,
-            tokens: data.tokens,
-            latencyMs: data.latency_ms,
-          },
-        ]);
+        setCurrentModel(data.model);
+
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: data.response,
+          model: data.model,
+          tokens: data.tokens,
+          latencyMs: data.latency_ms,
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
         refreshConversations();
+
+        // Auto-play TTS response
+        playTTS(data.response);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Something went wrong";
         setError(msg);
@@ -233,7 +273,7 @@ export default function ChatPage() {
         setIsLoading(false);
       }
     },
-    [conversationId, refreshConversations, inputValue, isLoading]
+    [conversationId, refreshConversations, inputValue, isLoading, playTTS]
   );
 
   const STARTERS = [
@@ -242,6 +282,13 @@ export default function ChatPage() {
     "Any P1 incidents right now?",
     "Summarize this week's alerts",
   ];
+
+  const hasMessages = messages.length > 0;
+
+  // Friendly short model label for footer
+  const modelLabel = currentModel
+    ? (currentModel.split(".").pop()?.split("-").slice(0, 3).join("-") ?? currentModel)
+    : "Claude on Bedrock";
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
@@ -301,7 +348,7 @@ export default function ChatPage() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-2xl space-y-5">
             {/* Empty state */}
-            {messages.length === 0 && (
+            {!hasMessages && (
               <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
                 {/* Hero bubble */}
                 <div className="relative mb-7">
@@ -392,7 +439,7 @@ export default function ChatPage() {
                     <line x1="12" x2="12" y1="19" y2="22" />
                   </svg>
                 </div>
-                <div className="rounded-2xl rounded-tl-sm border border-glass-border bg-glass-bg px-4 py-3 backdrop-blur-xl">
+                <div className="py-3 px-1">
                   <div className="flex items-center gap-1">
                     {[0, 150, 300].map((delay) => (
                       <span
@@ -409,15 +456,16 @@ export default function ChatPage() {
         </div>
 
         {/* Input area */}
-        <div className="border-t border-glass-border bg-surface/85 px-4 py-3.5 backdrop-blur-xl shrink-0">
+        <div className="border-t border-glass-border bg-surface/85 px-4 pt-3 pb-2 backdrop-blur-xl shrink-0">
           <div className="mx-auto max-w-2xl">
             <div className="flex items-end gap-3">
-              {/* Floating voice bubble */}
+              {/* Voice bubble */}
               <div className="shrink-0 pb-1">
                 <VoiceBubble
                   size={50}
-                  isResponding={isLoading}
-                  responseIntensity={isLoading ? 0.85 : 0.35}
+                  isResponding={isLoading || isTTSPlaying}
+                  responseIntensity={isLoading || isTTSPlaying ? 0.85 : 0.35}
+                  onTranscript={handleSend}
                   className="select-none"
                 />
               </div>
@@ -432,7 +480,7 @@ export default function ChatPage() {
                   onStop={() => setIsLoading(false)}
                 >
                   <ChatInputTextArea
-                    placeholder="Ask about your infrastructure…"
+                    placeholder={hasMessages ? "Reply…" : "Ask about your infrastructure…"}
                     disabled={isLoading}
                   />
                   <ChatInputSubmit />
@@ -440,9 +488,25 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <p className="mt-2 text-center text-[10px] text-foreground-muted opacity-50">
-              Claude on AWS Bedrock · MiniMax TTS · Datadog LLM Observability
-            </p>
+            {/* Input footer: model name left, waveform indicator right */}
+            <div className="mt-1.5 flex items-center justify-between px-1">
+              <span className="text-[10px] text-foreground-muted opacity-50 font-mono truncate max-w-[200px]">
+                {modelLabel}
+              </span>
+              {/* Waveform bars — animate when TTS playing */}
+              <span className="flex items-end gap-px h-3 opacity-40">
+                {[55, 100, 70, 85, 45].map((h, i) => (
+                  <span
+                    key={i}
+                    className={`w-0.5 rounded-full bg-foreground-muted ${isTTSPlaying ? "animate-pulse" : ""}`}
+                    style={{
+                      height: `${h}%`,
+                      animationDelay: isTTSPlaying ? `${i * 0.1}s` : undefined,
+                    }}
+                  />
+                ))}
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { VoiceButton } from "./VoiceButton";
 
 interface ChatMessageProps {
@@ -18,6 +19,17 @@ export function ChatMessage({
   latencyMs,
 }: ChatMessageProps) {
   const isUser = role === "user";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard not available
+    }
+  }, [content]);
 
   return (
     <div
@@ -46,20 +58,45 @@ export function ChatMessage({
 
       <div className={`flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"} max-w-[78%]`}>
         {/* Bubble */}
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-            isUser
-              ? "bg-accent/20 text-foreground rounded-tr-sm border border-accent/15"
-              : "border border-glass-border bg-glass-bg text-foreground backdrop-blur-xl rounded-tl-sm"
-          }`}
-        >
-          <p className="whitespace-pre-wrap break-words">{content}</p>
-        </div>
+        {isUser ? (
+          <div className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed bg-accent/20 text-foreground border border-accent/15">
+            <p className="whitespace-pre-wrap break-words">{content}</p>
+          </div>
+        ) : (
+          /* Assistant: clean text, no bubble background */
+          <div className="px-1 py-1 text-sm leading-relaxed text-foreground">
+            <p className="whitespace-pre-wrap break-words">{content}</p>
+          </div>
+        )}
 
-        {/* Metadata row — only for assistant */}
+        {/* Action row — only for assistant */}
         {!isUser && (
-          <div className="flex items-center gap-2 px-1">
+          <div className="flex items-center gap-1 px-1">
+            {/* Copy button */}
+            <button
+              onClick={handleCopy}
+              title="Copy to clipboard"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-white/6 hover:text-foreground"
+            >
+              {copied ? (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                </svg>
+              )}
+            </button>
+
+            {/* TTS play button (icon-only) */}
             <VoiceButton text={content} />
+
+            {/* Divider */}
+            <div className="h-3 w-px bg-white/10 mx-0.5" />
+
+            {/* Metadata */}
             <div className="flex items-center gap-2">
               {latencyMs != null && (
                 <span className="flex items-center gap-1 text-[10px] text-foreground-muted">
