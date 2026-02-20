@@ -151,3 +151,35 @@ export async function getConversationMessages(
 export async function getMetrics(): Promise<MetricsResponse> {
   return apiFetch<MetricsResponse>("/api/metrics");
 }
+
+// ---------------------------------------------------------------------------
+// Live key test (calls real APIs — takes ~5-10s)
+// ---------------------------------------------------------------------------
+
+export interface KeyTestResult {
+  status: "ok" | "error" | "warning";
+  method?: string;
+  region?: string;
+  model?: string;
+  latency_ms?: number;
+  response?: string;
+  audio_bytes?: number;
+  site?: string;
+  app_key?: string;
+  error?: string;
+}
+
+export interface KeyTestResponse {
+  results: {
+    bedrock: KeyTestResult;
+    minimax: KeyTestResult;
+    datadog: KeyTestResult;
+    postgres: KeyTestResult;
+  };
+  summary: Record<string, string>;
+  all_ok: boolean;
+}
+
+export async function testKeysLive(): Promise<KeyTestResponse> {
+  return apiFetch<KeyTestResponse>("/api/health/keys");
+}

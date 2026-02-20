@@ -7,8 +7,10 @@ import {
   sendChatMessage,
   listConversations,
   getConversationMessages,
+  testKeysLive,
   type ChatResponse,
   type ConversationSummary,
+  type KeyTestResponse,
 } from "@/lib/api";
 
 interface Message {
@@ -17,6 +19,152 @@ interface Message {
   model?: string;
   tokens?: { input: number; output: number };
   latencyMs?: number;
+}
+
+// ---------------------------------------------------------------------------
+// API Key Status Panel (discrete dropdown in sidebar footer)
+// ---------------------------------------------------------------------------
+function ApiKeyPanel() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<KeyTestResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await testKeysLive();
+      setResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Test failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const dot = (status: string) => {
+    const color =
+      status === "ok" ? "var(--success)" : status === "warning" ? "var(--warning)" : "var(--error)";
+    return (
+      <span
+        className="inline-block h-2 w-2 shrink-0 rounded-full"
+        style={{ background: color }}
+      />
+    );
+  };
+
+  const SERVICES = [
+    { key: "bedrock", label: "AWS Bedrock" },
+    { key: "minimax", label: "MiniMax TTS" },
+    { key: "datadog", label: "Datadog" },
+    { key: "postgres", label: "PostgreSQL" },
+  ] as const;
+
+  const overallOk = result?.all_ok;
+  const overallColor = overallOk ? "var(--success)" : result ? "var(--error)" : "var(--foreground-muted)";
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border)" }}>
+      {/* Toggle button */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-all"
+        style={{ color: "var(--foreground-muted)" }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+      >
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: overallColor }}
+        />
+        <span className="flex-1 text-[11px] font-medium">API Status</span>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="px-3 pb-3">
+          {/* Service rows */}
+          <div className="mb-2 space-y-1.5">
+            {SERVICES.map(({ key, label }) => {
+              const svc = result?.results[key as keyof typeof result.results];
+              const status = svc?.status ?? "unknown";
+              return (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--foreground-muted)" }}>
+                    {dot(status)}
+                    {label}
+                  </span>
+                  <div className="text-right">
+                    {svc?.latency_ms && (
+                      <span className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>
+                        {svc.latency_ms}ms
+                      </span>
+                    )}
+                    {svc?.method && (
+                      <span className="ml-1 text-[10px]" style={{ color: "var(--accent)" }}>
+                        [{svc.method}]
+                      </span>
+                    )}
+                    {svc?.error && (
+                      <span className="ml-1 text-[10px]" style={{ color: "var(--error)" }}>
+                        {svc.error.slice(0, 22)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {error && (
+            <p className="mb-2 text-[10px]" style={{ color: "var(--error)" }}>{error}</p>
+          )}
+
+          <button
+            onClick={run}
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-medium transition-all"
+            style={{
+              background: "var(--surface-raised)",
+              color: loading ? "var(--foreground-muted)" : "var(--accent)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {loading ? (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
+                </svg>
+                Testing…
+              </>
+            ) : (
+              "Run Test"
+            )}
+          </button>
+
+          {result && (
+            <p className="mt-1.5 text-center text-[10px]" style={{ color: overallOk ? "var(--success)" : "var(--error)" }}>
+              {overallOk ? "All systems go ✓" : "Issues detected"}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +250,9 @@ function ConversationSidebar({
           </div>
         )}
       </div>
+
+      {/* API Key Status — discrete dropdown at sidebar footer */}
+      <ApiKeyPanel />
     </aside>
   );
 }

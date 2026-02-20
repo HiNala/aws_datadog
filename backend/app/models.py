@@ -66,6 +66,7 @@ class ServiceStatus(BaseModel):
     database: str = "unknown"
     bedrock: str = "unknown"
     minimax: str = "unknown"
+    datadog: str = "unknown"
 
 
 class HealthResponse(BaseModel):
