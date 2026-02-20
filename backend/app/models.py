@@ -158,7 +158,8 @@ class DebateSessionRow(Base):
     agent_a_voice = Column(String, default="English_expressive_narrator")
     agent_b_name = Column(String, nullable=False)
     agent_b_perspective = Column(Text, nullable=False)
-    agent_b_voice = Column(String, default="English_calmness_narrator")
+    agent_b_voice = Column(String, default="Deep_Voice_Man")
+    style = Column(String, default="standard")
     num_turns = Column(Integer, default=6)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -199,6 +200,9 @@ class DebateTurnRow(Base):
 class DebateStartRequest(BaseModel):
     topic: str
     num_turns: int = 6
+    voice_a: str | None = None   # override Agent A voice (defaults to English_expressive_narrator)
+    voice_b: str | None = None   # override Agent B voice (defaults to Deep_Voice_Man)
+    style: str = "standard"      # "standard", "rap_battle", "blame_game", "roast"
 
 
 class AgentProfile(BaseModel):

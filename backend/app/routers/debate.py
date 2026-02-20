@@ -33,6 +33,7 @@ from app.models import (
     DebateTurnRow,
 )
 from app.services import debate_orchestrator
+from app.services.minimax_tts import DEBATE_VOICES
 from app.services.datadog_obs import (
     annotate,
     annotate_llm_call,
@@ -43,9 +44,8 @@ from app.services.datadog_obs import (
 logger = logging.getLogger("opsvoice.debate")
 router = APIRouter(prefix="/api/debate", tags=["debate"])
 
-# Voice assignment: Agent A gets expressive narrator, Agent B gets calm narrator
-_VOICE_A = "English_expressive_narrator"
-_VOICE_B = "English_calmness_narrator"
+_VOICE_A_DEFAULT = "English_expressive_narrator"
+_VOICE_B_DEFAULT = "Deep_Voice_Man"
 _COLOR_A = "indigo"
 _COLOR_B = "amber"
 
@@ -62,6 +62,44 @@ def _get_session(session_id: str, db: Session) -> DebateSessionRow:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/debate/voices  — static list of available voices (must come before /{session_id})
+# ---------------------------------------------------------------------------
+
+@router.get("/voices")
+def get_voices():
+    """Return all available debate voices with metadata."""
+    return {"voices": DEBATE_VOICES}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/debate/sessions/list — list recent sessions (must come before /{session_id})
+# ---------------------------------------------------------------------------
+
+@router.get("/sessions/list")
+def list_sessions_inline(limit: int = 10, db: Session = Depends(get_db)):
+    sessions = (
+        db.query(DebateSessionRow)
+        .order_by(DebateSessionRow.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "sessions": [
+            {
+                "session_id": s.id,
+                "topic": s.topic,
+                "agent_a_name": s.agent_a_name,
+                "agent_b_name": s.agent_b_name,
+                "num_turns": s.num_turns,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in sessions
+        ],
+        "total": len(sessions),
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /api/debate/start
 # ---------------------------------------------------------------------------
 
@@ -74,23 +112,26 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Topic too long (max 500 chars)")
 
     num_turns = max(2, min(req.num_turns, 12))  # clamp to 2–12
-    # Ensure even number so both agents get equal turns
     if num_turns % 2 != 0:
         num_turns += 1
+
+    voice_a = (req.voice_a or _VOICE_A_DEFAULT).strip() or _VOICE_A_DEFAULT
+    voice_b = (req.voice_b or _VOICE_B_DEFAULT).strip() or _VOICE_B_DEFAULT
+    style = getattr(req, "style", "standard")
 
     session_id = str(uuid.uuid4())
 
     with workflow_span("debate-session-start"):
         annotate(
             input_data=topic,
-            tags={"env": "hackathon", "ml_app": "opsvoice", "feature": "debate"},
+            tags={"env": "hackathon", "ml_app": "opsvoice", "feature": "debate", "style": style},
         )
 
         # ── Generate perspectives ──────────────────────────────────────────
         with task_span("generate-perspectives"):
             t0 = time.time()
             try:
-                perspectives = debate_orchestrator.generate_perspectives(topic)
+                perspectives = debate_orchestrator.generate_perspectives(topic, style=style)
             except Exception as e:
                 logger.error("Perspective generation failed: %s", e)
                 raise HTTPException(status_code=502, detail=f"Failed to generate perspectives: {e}")
@@ -114,11 +155,12 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
                 topic=topic,
                 agent_a_name=perspectives["agent_a"]["name"],
                 agent_a_perspective=perspectives["agent_a"]["perspective"],
-                agent_a_voice=_VOICE_A,
+                agent_a_voice=voice_a,
                 agent_b_name=perspectives["agent_b"]["name"],
                 agent_b_perspective=perspectives["agent_b"]["perspective"],
-                agent_b_voice=_VOICE_B,
+                agent_b_voice=voice_b,
                 num_turns=num_turns,
+                style=style,
                 created_at=datetime.now(timezone.utc),
             )
             db.add(row)
@@ -154,13 +196,13 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
         agent_a=AgentProfile(
             name=perspectives["agent_a"]["name"],
             perspective=perspectives["agent_a"]["perspective"],
-            voice=_VOICE_A,
+            voice=voice_a,
             color=_COLOR_A,
         ),
         agent_b=AgentProfile(
             name=perspectives["agent_b"]["name"],
             perspective=perspectives["agent_b"]["perspective"],
-            voice=_VOICE_B,
+            voice=voice_b,
             color=_COLOR_B,
         ),
         num_turns=num_turns,
@@ -254,6 +296,7 @@ def generate_turn(
                         opponent_name=opponent_name,
                         history=history,
                         turn_number=turn_number,
+                        style=getattr(session, "style", "standard"),
                     )
                 latency_ms = round((time.time() - t0) * 1000, 1)
 
@@ -390,28 +433,4 @@ def get_session(session_id: str, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/debate/sessions  — List recent sessions
-# ---------------------------------------------------------------------------
-
-@router.get("/sessions/list")
-def list_sessions(limit: int = 10, db: Session = Depends(get_db)):
-    sessions = (
-        db.query(DebateSessionRow)
-        .order_by(DebateSessionRow.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return {
-        "sessions": [
-            {
-                "session_id": s.id,
-                "topic": s.topic,
-                "agent_a_name": s.agent_a_name,
-                "agent_b_name": s.agent_b_name,
-                "num_turns": s.num_turns,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-            }
-            for s in sessions
-        ],
-        "total": len(sessions),
-    }
+# (voices and sessions/list routes are defined above, before /{session_id})

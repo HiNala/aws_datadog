@@ -267,15 +267,31 @@ export interface DebateSessionDetail {
   created_at: string | null;
 }
 
+export interface DebateVoice {
+  id: string;
+  label: string;
+  gender: "male" | "female" | "neutral";
+  style: string;
+}
+
+/** Fetch available debate voices with metadata. */
+export async function getDebateVoices(): Promise<DebateVoice[]> {
+  const res = await apiFetch<{ voices: DebateVoice[] }>("/api/debate/voices");
+  return res.voices;
+}
+
 /** Start a new debate session and receive agent profiles. */
 export async function startDebate(
   topic: string,
-  numTurns = 6
+  numTurns = 6,
+  style = "standard",
+  voiceA?: string,
+  voiceB?: string,
 ): Promise<DebateSessionResponse> {
   return apiFetch<DebateSessionResponse>("/api/debate/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, num_turns: numTurns }),
+    body: JSON.stringify({ topic, num_turns: numTurns, style, voice_a: voiceA, voice_b: voiceB }),
   });
 }
 

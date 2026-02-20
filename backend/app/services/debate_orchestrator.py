@@ -79,7 +79,7 @@ def _infer(messages: list[dict]) -> dict:
 # Perspective generation
 # ---------------------------------------------------------------------------
 
-_PERSPECTIVE_SYSTEM = """You are a debate format architect. Given a topic, craft two contrasting but intellectually legitimate perspectives for a structured dialogue.
+_PERSPECTIVE_SYSTEM_STANDARD = """You are a debate format architect. Given a topic, craft two contrasting but intellectually legitimate perspectives for a structured dialogue.
 
 Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
 {
@@ -99,15 +99,76 @@ Rules:
 - The two positions should create productive tension, not just be opposites
 - Keep perspective sentences under 20 words"""
 
+_PERSPECTIVE_SYSTEM_RAP_BATTLE = """You are a hip-hop battle organizer. Given a tech topic, create two rapper personas who represent opposing sides.
 
-def generate_perspectives(topic: str) -> dict:
+Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
+{
+  "agent_a": {
+    "name": "MC [Tech Name]",
+    "perspective": "One rhyming couplet stating their stance."
+  },
+  "agent_b": {
+    "name": "Lil [Tech Name]",
+    "perspective": "One rhyming couplet stating their contrasting stance."
+  }
+}
+
+Rules:
+- Names should be funny tech puns (e.g. "MC Monolith", "Lil K8s", "DJ Docker")
+- Perspectives must be rhyming bars
+- Keep it high energy"""
+
+_PERSPECTIVE_SYSTEM_BLAME_GAME = """You are a corporate HR mediator for a tech incident. Given an outage scenario, create two employees blaming each other.
+
+Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
+{
+  "agent_a": {
+    "name": "[Job Title] [Name]",
+    "perspective": "Defensive statement blaming the other person."
+  },
+  "agent_b": {
+    "name": "[Job Title] [Name]",
+    "perspective": "Aggressive statement blaming the first person."
+  }
+}
+
+Rules:
+- Names should be realistic roles (e.g. "DevOps Dave", "Product Paul", "Intern Ian")
+- Perspectives must be passive-aggressive and finger-pointing
+- Make it sound like a tense post-mortem"""
+
+_PERSPECTIVE_SYSTEM_ROAST = """You are a comedy roast master. Given a tech topic, create two comedians who will roast the concept.
+
+Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
+{
+  "agent_a": {
+    "name": "Roaster [Name]",
+    "perspective": "A brutal one-liner about the topic."
+  },
+  "agent_b": {
+    "name": "Comedian [Name]",
+    "perspective": "A sarcastic observation about the topic."
+  }
+}
+"""
+
+def generate_perspectives(topic: str, style: str = "standard") -> dict:
     """
     Call LLM to produce two agent profiles for the given topic.
     Returns a dict with agent_a, agent_b keys (each with name + perspective)
     plus a _meta key with model/token/latency info.
     """
+    if style == "rap_battle":
+        system_prompt = _PERSPECTIVE_SYSTEM_RAP_BATTLE
+    elif style == "blame_game":
+        system_prompt = _PERSPECTIVE_SYSTEM_BLAME_GAME
+    elif style == "roast":
+        system_prompt = _PERSPECTIVE_SYSTEM_ROAST
+    else:
+        system_prompt = _PERSPECTIVE_SYSTEM_STANDARD
+
     messages = [
-        {"role": "system", "content": _PERSPECTIVE_SYSTEM},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": f'Topic: "{topic}"\n\nGenerate two contrasting debate perspectives.',
@@ -160,7 +221,7 @@ def generate_perspectives(topic: str) -> dict:
 # Turn generation
 # ---------------------------------------------------------------------------
 
-_TURN_SYSTEM_TEMPLATE = """You are {agent_name}, a thoughtful voice in a structured debate.
+_TURN_SYSTEM_STANDARD = """You are {agent_name}, a thoughtful voice in a structured debate.
 
 Your position: {agent_perspective}
 
@@ -175,6 +236,42 @@ Delivery rules — follow precisely:
 - Do not introduce yourself or state your name
 - Do not start with "I" — vary your sentence openings"""
 
+_TURN_SYSTEM_RAP_BATTLE = """You are {agent_name}, a tech rapper in a battle.
+
+Your position: {agent_perspective}
+Topic: {topic}
+
+Delivery rules:
+- Write 2 verses (8-12 bars total)
+- RHYME SCHEME IS MANDATORY (AABB or ABAB)
+- Roast the opponent's tech choices
+- Use slang but keep it technical (mention specific AWS services, coding terms)
+- NO MARKDOWN, just text
+- Keep it rhythmic for TTS"""
+
+_TURN_SYSTEM_BLAME_GAME = """You are {agent_name}, in a heated argument about an outage.
+
+Your position: {agent_perspective}
+Topic: {topic}
+
+Delivery rules:
+- Write 1 paragraph (50-80 words)
+- Be defensive, interruptive, and blame the other person
+- Use corporate buzzwords weaponized as insults
+- Mention specific (fictional) logs, commits, or tickets
+- NO MARKDOWN
+- Act like you are trying to save your job"""
+
+_TURN_SYSTEM_ROAST = """You are {agent_name}, a comedian roasting this topic.
+
+Your position: {agent_perspective}
+Topic: {topic}
+
+Delivery rules:
+- Write 3-4 punchy sentences
+- Be savage but funny
+- Use metaphors
+- NO MARKDOWN"""
 
 def generate_turn(
     *,
@@ -184,6 +281,7 @@ def generate_turn(
     opponent_name: str,
     history: list[dict],  # [{"agent": "a"|"b", "name": str, "text": str}]
     turn_number: int,
+    style: str = "standard",
 ) -> dict:
     """
     Generate the next debate turn for the specified agent.
@@ -195,11 +293,21 @@ def generate_turn(
         opponent_name: Display name of the opponent (for attribution in history).
         history: List of previous turns in chronological order.
         turn_number: 1-indexed turn number.
+        style: Debate style (standard, rap_battle, blame_game, roast).
 
     Returns:
         dict with text, model, input_tokens, output_tokens, latency_ms.
     """
-    system = _TURN_SYSTEM_TEMPLATE.format(
+    if style == "rap_battle":
+        template = _TURN_SYSTEM_RAP_BATTLE
+    elif style == "blame_game":
+        template = _TURN_SYSTEM_BLAME_GAME
+    elif style == "roast":
+        template = _TURN_SYSTEM_ROAST
+    else:
+        template = _TURN_SYSTEM_STANDARD
+
+    system = template.format(
         agent_name=agent_name,
         agent_perspective=agent_perspective,
         topic=topic,

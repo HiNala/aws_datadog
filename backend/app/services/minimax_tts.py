@@ -13,11 +13,47 @@ MODEL_HD = "speech-2.8-hd"
 MODEL_TURBO = "speech-2.8-turbo"
 
 # Voices tuned for different scenarios
+# All confirmed-working MiniMax Speech-2.8 voice IDs (tested Feb 2026)
 VOICES = {
-    "narrator":    "English_expressive_narrator",   # rich, professional
-    "calm":        "English_calmness_narrator",      # calm authority
-    "default":     "English_expressive_narrator",
+    # Female voices
+    "Wise_Woman":           "Wise_Woman",           # warm, authoritative
+    "Calm_Woman":           "Calm_Woman",           # composed, clear
+    "Friendly_Person":      "Friendly_Person",      # warm, approachable
+    "Inspirational_girl":   "Inspirational_girl",   # upbeat, motivating
+    "Lively_Girl":          "Lively_Girl",          # energetic, bright
+    "Lovely_Girl":          "Lovely_Girl",          # soft, expressive
+    "Abbess":               "Abbess",               # formal, measured
+    "Sweet_Girl_2":         "Sweet_Girl_2",         # gentle, clear
+    "Exuberant_Girl":       "Exuberant_Girl",       # enthusiastic, bold
+    # Male voices
+    "Deep_Voice_Man":       "Deep_Voice_Man",       # deep, commanding
+    "Patient_Man":          "Patient_Man",          # calm, deliberate
+    "Casual_Guy":           "Casual_Guy",           # relaxed, natural
+    "Young_Knight":         "Young_Knight",         # earnest, idealistic
+    "Determined_Man":       "Determined_Man",       # resolute, direct
+    "Decent_Boy":           "Decent_Boy",           # honest, steady
+    "Imposing_Manner":      "Imposing_Manner",      # forceful, bold
+    "Elegant_Man":          "Elegant_Man",          # refined, articulate
+    # Legacy narrator
+    "narrator":             "English_expressive_narrator",
+    "default":              "English_expressive_narrator",
 }
+
+# Curated list for debate — picked for strong contrast and audio clarity
+DEBATE_VOICES = [
+    {"id": "English_expressive_narrator", "label": "Expressive Narrator", "gender": "neutral", "style": "professional"},
+    {"id": "Wise_Woman",                  "label": "Wise Woman",          "gender": "female",  "style": "authoritative"},
+    {"id": "Deep_Voice_Man",              "label": "Deep Voice",          "gender": "male",    "style": "commanding"},
+    {"id": "Calm_Woman",                  "label": "Calm Woman",          "gender": "female",  "style": "composed"},
+    {"id": "Determined_Man",              "label": "Determined Man",      "gender": "male",    "style": "resolute"},
+    {"id": "Imposing_Manner",             "label": "Imposing",            "gender": "male",    "style": "forceful"},
+    {"id": "Friendly_Person",             "label": "Friendly",            "gender": "neutral", "style": "warm"},
+    {"id": "Patient_Man",                 "label": "Patient Man",         "gender": "male",    "style": "deliberate"},
+    {"id": "Lively_Girl",                 "label": "Lively",              "gender": "female",  "style": "energetic"},
+    {"id": "Casual_Guy",                  "label": "Casual Guy",          "gender": "male",    "style": "relaxed"},
+    {"id": "Young_Knight",                "label": "Young Knight",        "gender": "male",    "style": "earnest"},
+    {"id": "Abbess",                      "label": "Abbess",              "gender": "female",  "style": "formal"},
+]
 
 
 class MiniMaxTTS:
@@ -124,14 +160,25 @@ class MiniMaxTTS:
 
         logger.info("TTS stream: %d chars, voice=%s (turbo)", len(text), voice_id)
 
-        # Use lower-latency UW endpoint for streaming
         with httpx.Client(timeout=60.0) as client:
             with client.stream("POST", TTS_URL_UW, json=payload, headers=self._headers()) as response:
                 if response.status_code != 200:
                     raise RuntimeError(f"TTS stream returned {response.status_code}")
                 total = 0
+                first_chunk = True
                 for chunk in response.iter_bytes(chunk_size=2048):
                     if chunk:
+                        if first_chunk:
+                            first_chunk = False
+                            # MiniMax returns JSON error with HTTP 200 — detect it
+                            if chunk[:1] == b"{" and b"status_code" in chunk:
+                                import json as _json
+                                try:
+                                    err = _json.loads(chunk)
+                                    msg = err.get("base_resp", {}).get("status_msg", "unknown TTS error")
+                                    raise RuntimeError(f"MiniMax TTS error: {msg}")
+                                except (ValueError, KeyError):
+                                    pass
                         total += len(chunk)
                         yield chunk
                 logger.info("TTS stream done: %d bytes total", total)
