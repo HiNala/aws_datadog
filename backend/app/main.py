@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.db import init_db
+from app.migrations import run_migrations
 from app.routers import chat, health, tts
 from app.routers import conversations, metrics, debate
 from app.services.datadog_obs import setup_observability
@@ -61,6 +62,7 @@ async def startup():
     settings.log_key_status()
     init_db()
     logger.info("Database initialized")
+    run_migrations()
     setup_observability()
     logger.info("=" * 60)
 

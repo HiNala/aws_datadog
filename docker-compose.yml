@@ -69,6 +69,11 @@ services:
       DD_LOGS_ENABLED: "true"
       DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
       DD_CONTAINER_EXCLUDE: "name:dd-agent"
+      # Suppress noise on Docker Desktop (no EC2/GCE/K8s available)
+      DD_SYSTEM_PROBE_ENABLED: "false"
+      DD_PROCESS_AGENT_ENABLED: "false"
+      DD_CLOUD_PROVIDER_METADATA: ""
+      DD_LOG_LEVEL: "warn"
     ports:
       - "8125:8125/udp"   # DogStatsD
       - "8126:8126"       # APM traces
