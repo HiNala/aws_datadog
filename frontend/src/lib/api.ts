@@ -10,6 +10,7 @@ export interface ChatResponse {
   response: string;
   conversation_id: string;
   model: string;
+  model_provider: string;
   tokens: { input: number; output: number };
   latency_ms: number;
 }
@@ -150,4 +151,64 @@ export async function getConversationMessages(
 
 export async function getMetrics(): Promise<MetricsResponse> {
   return apiFetch<MetricsResponse>("/api/metrics");
+}
+
+// ---------------------------------------------------------------------------
+// Streaming TTS (speech-2.8-turbo, ~200ms first audio)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a ReadableStream of raw MP3 bytes.
+ * Use with MediaSource API for instant playback.
+ */
+export async function getTextToSpeechStream(
+  text: string,
+  voiceId?: string
+): Promise<ReadableStream<Uint8Array>> {
+  const res = await fetch(`${API_BASE}/api/tts/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice_id: voiceId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `TTS stream failed: ${res.status}`);
+  }
+
+  if (!res.body) throw new Error("No response body for TTS stream");
+  return res.body;
+}
+
+// ---------------------------------------------------------------------------
+// Live key test (calls real APIs — takes ~5-10s)
+// ---------------------------------------------------------------------------
+
+export interface KeyTestResult {
+  status: "ok" | "error" | "warning";
+  method?: string;
+  region?: string;
+  model?: string;
+  latency_ms?: number;
+  response?: string;
+  audio_bytes?: number;
+  site?: string;
+  app_key?: string;
+  error?: string;
+}
+
+export interface KeyTestResponse {
+  results: {
+    bedrock: KeyTestResult;
+    minimax_tts: KeyTestResult;
+    minimax_llm: KeyTestResult;
+    datadog: KeyTestResult;
+    postgres: KeyTestResult;
+  };
+  summary: Record<string, string>;
+  all_ok: boolean;
+}
+
+export async function testKeysLive(): Promise<KeyTestResponse> {
+  return apiFetch<KeyTestResponse>("/api/health/keys");
 }

@@ -27,12 +27,16 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-opsvoice}:${POSTGRES_PASSWORD:-opsvoice_hack2026}@postgres:5432/${POSTGRES_DB:-opsvoice}
+      # Datadog Agent host for APM traces (agent runs as dd-agent service)
+      DD_AGENT_HOST: dd-agent
+      DD_TRACE_AGENT_URL: http://dd-agent:8126
     volumes:
       - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build:
@@ -42,9 +46,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Server-side proxy target (Docker internal network) — used by next.config.ts rewrites
       BACKEND_URL: http://backend:8000
-      # Public URL shown to the browser — for display/info only
       NEXT_PUBLIC_API_URL: http://localhost:8000
     volumes:
       - ./frontend:/app
@@ -53,6 +55,30 @@ services:
     depends_on:
       - backend
     command: npm run dev
+
+  # Datadog Agent — infrastructure metrics, APM traces, log collection
+  dd-agent:
+    image: gcr.io/datadoghq/agent:7
+    restart: unless-stopped
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE:-us5.datadoghq.com}
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_CONTAINER_EXCLUDE: "name:dd-agent"
+    ports:
+      - "8125:8125/udp"   # DogStatsD
+      - "8126:8126"       # APM traces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "agent", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:

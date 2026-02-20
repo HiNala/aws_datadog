@@ -6,18 +6,34 @@ interface GlassCardProps {
   hover?: boolean;
 }
 
-export function GlassCard({
-  children,
-  className = "",
-  hover = false,
-}: GlassCardProps) {
+export function GlassCard({ children, className = "", hover = false }: GlassCardProps) {
   return (
     <div
-      className={`rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.3)] ${
+      className={`rounded-2xl transition-all duration-200 ${hover ? "cursor-default" : ""} ${className}`}
+      style={{
+        background: "var(--card-bg)",
+        border: "1px solid var(--card-border)",
+        boxShadow: "var(--shadow-sm)",
+        ...(hover
+          ? {
+              // hover handled inline via onMouseEnter/Leave in JS
+            }
+          : {}),
+      }}
+      onMouseEnter={
         hover
-          ? "transition-all duration-300 hover:border-glass-hover hover:bg-glass-hover hover:shadow-[0_8px_40px_rgba(0,0,0,0.4)]"
-          : ""
-      } ${className}`}
+          ? (e) => {
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)";
+            }
+          : undefined
+      }
+      onMouseLeave={
+        hover
+          ? (e) => {
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)";
+            }
+          : undefined
+      }
     >
       {children}
     </div>

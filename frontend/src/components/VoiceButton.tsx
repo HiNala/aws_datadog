@@ -27,14 +27,8 @@ export function VoiceButton({ text }: VoiceButtonProps) {
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      audio.onended = () => {
-        setState("idle");
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        setState("idle");
-        URL.revokeObjectURL(url);
-      };
+      audio.onended = () => { setState("idle"); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setState("idle"); URL.revokeObjectURL(url); };
 
       await audio.play();
       setState("playing");
@@ -42,6 +36,9 @@ export function VoiceButton({ text }: VoiceButtonProps) {
       setState("idle");
     }
   }, [text, state]);
+
+  const isPlaying = state === "playing";
+  const isLoading = state === "loading";
 
   return (
     <button

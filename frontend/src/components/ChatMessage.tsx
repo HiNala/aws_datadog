@@ -7,16 +7,38 @@ interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
   model?: string;
+  modelProvider?: string;
   tokens?: { input: number; output: number };
   latencyMs?: number;
 }
 
+function ProviderPill({ provider, model }: { provider: string; model?: string }) {
+  const isAWS     = provider === "AWS Bedrock";
+  const isMiniMax = provider === "MiniMax";
+
+  const color = isAWS
+    ? { bg: "color-mix(in srgb, #f90 10%, transparent)", text: "#b45309" }
+    : isMiniMax
+      ? { bg: "color-mix(in srgb, var(--accent) 10%, transparent)", text: "var(--accent)" }
+      : null;
+
+  if (!color) return null;
+
+  const label = isAWS ? "AWS Bedrock" : `MiniMax M2.5`;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+      style={{ background: color.bg, color: color.text }}
+    >
+      <span className="h-1 w-1 rounded-full" style={{ background: color.text }} />
+      {label}
+    </span>
+  );
+}
+
 export function ChatMessage({
-  role,
-  content,
-  model,
-  tokens,
-  latencyMs,
+  role, content, model, modelProvider, tokens, latencyMs,
 }: ChatMessageProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -31,115 +53,74 @@ export function ChatMessage({
     }
   }, [content]);
 
-  return (
-    <div
-      className={`flex gap-3 animate-slide-up ${isUser ? "justify-end" : "justify-start"}`}
-    >
-      {/* Assistant avatar */}
-      {!isUser && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 border border-accent/20">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-accent-light"
-          >
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" x2="12" y1="19" y2="22" />
-          </svg>
+  if (isUser) {
+    return (
+      <div className="flex justify-end gap-2.5 animate-slide-up">
+        <div
+          className="max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-relaxed"
+          style={{ background: "var(--user-bubble)", color: "var(--foreground)" }}
+        >
+          <p className="whitespace-pre-wrap">{content}</p>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      <div className={`flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"} max-w-[78%]`}>
-        {/* Bubble */}
-        {isUser ? (
-          <div className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed bg-accent/20 text-foreground border border-accent/15">
-            <p className="whitespace-pre-wrap break-words">{content}</p>
-          </div>
-        ) : (
-          /* Assistant: clean text, no bubble background */
-          <div className="px-1 py-1 text-sm leading-relaxed text-foreground">
-            <p className="whitespace-pre-wrap break-words">{content}</p>
-          </div>
-        )}
-
-        {/* Action row — only for assistant */}
-        {!isUser && (
-          <div className="flex items-center gap-1 px-1">
-            {/* Copy button */}
-            <button
-              onClick={handleCopy}
-              title="Copy to clipboard"
-              className="flex h-6 w-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-white/6 hover:text-foreground"
-            >
-              {copied ? (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                </svg>
-              )}
-            </button>
-
-            {/* TTS play button (icon-only) */}
-            <VoiceButton text={content} />
-
-            {/* Divider */}
-            <div className="h-3 w-px bg-white/10 mx-0.5" />
-
-            {/* Metadata */}
-            <div className="flex items-center gap-2">
-              {latencyMs != null && (
-                <span className="flex items-center gap-1 text-[10px] text-foreground-muted">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  {Math.round(latencyMs)}ms
-                </span>
-              )}
-              {tokens && (
-                <span className="text-[10px] text-foreground-muted">
-                  {(tokens.input + tokens.output).toLocaleString()} tok
-                </span>
-              )}
-              {model && (
-                <span className="truncate max-w-[120px] text-[10px] text-foreground-muted opacity-60 font-mono">
-                  {model.split(".").pop()?.split("-").slice(0, 3).join("-") ?? model}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+  return (
+    <div className="flex gap-3 animate-slide-up">
+      {/* OpsVoice avatar */}
+      <div
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+        style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" x2="12" y1="19" y2="22" />
+        </svg>
       </div>
 
-      {/* User avatar */}
-      {isUser && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/6 border border-white/8">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-foreground-muted"
+      {/* Message body — no bubble, Claude-style */}
+      <div className="max-w-[76%] min-w-0">
+        <p
+          className="text-sm leading-[1.7] whitespace-pre-wrap"
+          style={{ color: "var(--foreground)" }}
+        >
+          {content}
+        </p>
+
+        {/* Meta row */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <VoiceButton text={content} />
+          {/* Copy button */}
+          <button
+            onClick={handleCopy}
+            title="Copy to clipboard"
+            className="flex h-5 w-5 items-center justify-center rounded transition-colors"
+            style={{ color: copied ? "var(--success)" : "var(--foreground-muted)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = copied ? "var(--success)" : "var(--foreground-muted)"; }}
           >
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
+            {copied ? (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+            )}
+          </button>
+
+          {modelProvider && <ProviderPill provider={modelProvider} model={model} />}
+          {latencyMs != null && (
+            <span className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>
+              {Math.round(latencyMs)}ms
+            </span>
+          )}
+          {tokens && (
+            <span className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>
+              {(tokens.input + tokens.output).toLocaleString()} tok
+            </span>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

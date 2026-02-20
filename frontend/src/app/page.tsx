@@ -70,12 +70,19 @@ function timeAgo(iso: string) {
 
 function ActivityRow({ conv }: { conv: ConversationSummary }) {
   return (
-    <Link
-      href="/chat"
-      className="group flex items-start gap-3 border-b border-glass-border py-3 last:border-0 transition-colors hover:bg-white/2"
-    >
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 group-hover:bg-accent/15 transition-colors">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-light">
+    <Link href="/chat" className="flex items-start gap-3 py-3 last:border-0 transition-colors cursor-pointer" style={{ borderBottom: "1px solid var(--border)" }}>
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-accent-light"
+        >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </div>
@@ -153,54 +160,127 @@ export default function DashboardPage() {
   })();
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      {/* ── Header ── */}
-      <div className="mb-8 flex items-start justify-between animate-fade-in">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Observability
-          </h1>
-          <p className="mt-1 text-sm text-foreground-muted">
-            Real-time health and LLM metrics
-            {lastRefresh && (
-              <span className="ml-2 opacity-50">
-                · refreshed {timeAgo(lastRefresh.toISOString())}
-              </span>
-            )}
-          </p>
-        </div>
-
-        {/* System status pill */}
+    <div style={{ background: "var(--surface)", minHeight: "calc(100vh - 3.5rem)" }}>
+      {/* ── Linear Hero ── */}
+      <div
+        className="relative overflow-hidden"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        {/* Subtle radial glow in hero */}
         <div
-          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            loading
-              ? "border-glass-border bg-glass-bg text-foreground-muted"
-              : isOk
-                ? "border-success/20 bg-success/8 text-success"
-                : "border-error/20 bg-error/8 text-error"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              loading ? "bg-foreground-muted animate-pulse" : isOk ? "bg-success animate-pulse" : "bg-error"
-            }`}
-          />
-          {loading ? "Connecting…" : isOk ? "All systems operational" : "Degraded"}
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 50% at 50% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent)",
+          }}
+        />
+
+        <div className="relative mx-auto max-w-5xl px-6 py-10">
+          <div className="flex items-center justify-between">
+            <div className="animate-fade-in">
+              {/* Eyebrow */}
+              <p
+                className="mb-2 text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: "var(--accent)" }}
+              >
+                OpsVoice &mdash; AI Operations Agent
+              </p>
+              <h1
+                className="text-2xl font-bold tracking-tight"
+                style={{ color: "var(--foreground)", letterSpacing: "-0.03em" }}
+              >
+                Observability Dashboard
+              </h1>
+              <p className="mt-1.5 text-sm" style={{ color: "var(--foreground-muted)" }}>
+                Real-time service health and LLM metrics &mdash; auto-refreshes every 15s
+              </p>
+            </div>
+
+            {/* System status pill */}
+            <div
+              className="flex shrink-0 items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-all"
+              style={{
+                background: health?.status === "ok"
+                  ? "color-mix(in srgb, var(--success) 10%, transparent)"
+                  : loading
+                    ? "var(--surface-hover)"
+                    : "color-mix(in srgb, var(--error) 10%, transparent)",
+                color: health?.status === "ok"
+                  ? "var(--success)"
+                  : loading
+                    ? "var(--foreground-muted)"
+                    : "var(--error)",
+                border: `1px solid ${health?.status === "ok"
+                  ? "color-mix(in srgb, var(--success) 25%, transparent)"
+                  : loading
+                    ? "var(--border)"
+                    : "color-mix(in srgb, var(--error) 25%, transparent)"}`,
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: health?.status === "ok"
+                    ? "var(--success)"
+                    : loading
+                      ? "var(--foreground-muted)"
+                      : "var(--error)",
+                  animation: health?.status === "ok" ? "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" : "none",
+                }}
+              />
+              {loading ? "Connecting…" : health?.status === "ok" ? "All systems operational" : "Degraded"}
+            </div>
+          </div>
+
+          {/* Quick-action strip */}
+          <div className="mt-6 flex gap-3">
+            <a
+              href="/voice"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
+              style={{
+                background: "var(--accent)",
+                color: "#fff",
+                boxShadow: "0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+              Launch Voice Agent
+            </a>
+            <a
+              href="/chat"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
+              style={{
+                background: "var(--surface-raised)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Open Chat
+            </a>
+          </div>
         </div>
       </div>
 
-      {/* ── Error banner ── */}
+      {/* ── Main content ── */}
+      <div className="mx-auto max-w-5xl px-6 py-8">
+
+      {/* Backend error banner */}
       {error && (
-        <GlassCard className="mb-6 border-error/25 bg-error/5 p-4 animate-fade-in">
-          <div className="flex items-start gap-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-error">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-error">Backend unreachable</p>
-              <p className="mt-0.5 text-xs text-foreground-muted">{error}</p>
-            </div>
-          </div>
+        <GlassCard className="mb-6 border-error/30 bg-error/5 p-4">
+          <p className="text-sm font-medium text-error">
+            Backend unreachable: {error}
+          </p>
+          <p className="mt-1 text-xs text-foreground-muted">
+            Ensure <code className="rounded px-1 py-0.5 font-mono" style={{ background: "var(--surface-overlay)" }}>docker-compose up</code> is running
+          </p>
         </GlassCard>
       )}
 
@@ -314,49 +394,153 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Datadog card */}
+          {/* ── Datadog Observability Panel ── */}
           <section>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
-              Datadog LLM Observability
-            </h2>
-            <GlassCard className="p-4">
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                  style={{ background: "rgba(99,44,166,0.15)", border: "1px solid rgba(99,44,166,0.25)" }}
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>
+                Datadog Observability
+              </h2>
+              <span
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                style={{
+                  background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                  color: "var(--accent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                }}
+              >
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                  <circle cx="4" cy="4" r="4" />
+                </svg>
+                ddtrace-run active
+              </span>
+            </div>
+
+            {/* Deep-link cards — 2 col grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                {
+                  label: "LLM Traces",
+                  desc: "Every Claude invocation with token counts and latency",
+                  href: "https://app.datadoghq.com/llm/traces",
+                  icon: (
+                    <path d="M3 3v18h18M19 9l-5 5-4-4-3 3" strokeLinecap="round" strokeLinejoin="round" />
+                  ),
+                },
+                {
+                  label: "APM Service Map",
+                  desc: "End-to-end distributed traces for opsvoice-backend",
+                  href: "https://app.datadoghq.com/apm/services",
+                  icon: (
+                    <>
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="5" cy="19" r="2" />
+                      <circle cx="19" cy="19" r="2" />
+                      <path d="m12 7-7 10M12 7l7 10" />
+                    </>
+                  ),
+                },
+                {
+                  label: "LLM Evaluations",
+                  desc: "AI-powered quality scoring (hallucination, relevancy)",
+                  href: "https://app.datadoghq.com/llm/evaluations",
+                  icon: (
+                    <>
+                      <path d="M9 11l3 3L22 4" />
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                    </>
+                  ),
+                },
+                {
+                  label: "Error Tracking",
+                  desc: "Aggregated backend errors and stack traces",
+                  href: "https://app.datadoghq.com/error-tracking",
+                  icon: (
+                    <>
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </>
+                  ),
+                },
+              ].map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block rounded-xl p-4 transition-all duration-150"
+                  style={{
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--accent) 30%, transparent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+                  }}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400">
-                    <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">Live LLM traces</p>
-                  <p className="mt-0.5 text-xs text-foreground-muted">
-                    Every chat request is traced with input/output and latency spans
+                  <div className="mb-2.5 flex items-center justify-between">
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-lg"
+                      style={{ background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+                        {item.icon}
+                      </svg>
+                    </div>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-muted)" }}>
+                      <path d="M7 17l10-10M7 7h10v10" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                    {item.label}
                   </p>
-                </div>
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <a
-                    href="https://app.datadoghq.com/llm/traces"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs font-medium text-accent-light transition-colors hover:bg-accent/20"
-                  >
-                    LLM Traces
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 17l10-10" /><path d="M7 7h10v10" /></svg>
+                  <p className="mt-0.5 text-[11px] leading-snug" style={{ color: "var(--foreground-muted)" }}>
+                    {item.desc}
+                  </p>
+                </a>
+              ))}
+            </div>
+
+            {/* Setup banner — shown if DD not yet wired */}
+            <div
+              className="mt-3 flex items-start gap-3 rounded-xl p-4"
+              style={{
+                background: "color-mix(in srgb, var(--warning) 6%, var(--surface-raised))",
+                border: "1px solid color-mix(in srgb, var(--warning) 20%, transparent)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0" style={{ color: "var(--warning)" }}>
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>
+                  DD_API_KEY not configured — add your key to enable live traces
+                </p>
+                <p className="mt-0.5 text-[11px]" style={{ color: "var(--foreground-muted)" }}>
+                  1. Get keys at{" "}
+                  <a href="https://app.datadoghq.com/organization-settings/api-keys" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--accent)" }}>
+                    datadoghq.com/org-settings
                   </a>
-                  <a
-                    href="https://app.datadoghq.com/dashboard/lists"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg bg-white/4 px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
-                  >
-                    Dashboards
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 17l10-10" /><path d="M7 7h10v10" /></svg>
-                  </a>
-                </div>
+                  {" "}→ 2. Add to{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>.env</code>
+                  {" "}→ 3. Run{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>
+                    docker compose up --build -d
+                  </code>
+                  {" "}→ 4.{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>
+                    python scripts/create_dd_dashboard.py
+                  </code>
+                </p>
               </div>
-            </GlassCard>
+            </div>
           </section>
         </div>
 
@@ -376,13 +560,13 @@ export default function DashboardPage() {
 
           <GlassCard className="p-4">
             {loading ? (
-              <div className="space-y-3 py-1">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex gap-3 animate-pulse">
-                    <div className="h-7 w-7 rounded-lg bg-white/5 shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-2.5 w-3/4 rounded-sm bg-white/5" />
-                      <div className="h-2 w-1/2 rounded-sm bg-white/5" />
+              <div className="space-y-3 py-2">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="h-7 w-7 rounded-lg" style={{ background: "var(--surface-hover)" }} />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-hover)" }} />
+                      <div className="h-2.5 w-1/2 rounded" style={{ background: "var(--surface-hover)" }} />
                     </div>
                   </div>
                 ))}
@@ -406,7 +590,10 @@ export default function DashboardPage() {
                 ))}
                 <Link
                   href="/chat"
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-white/4 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
+                  className="mt-3 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors"
+                  style={{ background: "var(--surface-hover)", color: "var(--foreground-muted)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
                 >
                   View all in Chat
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

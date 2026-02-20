@@ -1,5 +1,5 @@
+import json
 import logging
-import time
 from typing import Any
 
 import httpx
@@ -8,11 +8,10 @@ from app.config import Settings
 
 logger = logging.getLogger("opsvoice.bedrock")
 
-BEDROCK_RUNTIME_URL = "https://bedrock-runtime.{region}.amazonaws.com"
 MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+MODEL_ID_FALLBACK = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
 MAX_TOKENS = 2048
-MAX_RETRIES = 3
-RETRY_BACKOFF = (1.0, 2.0, 4.0)  # seconds
 
 SYSTEM_PROMPT = (
     "You are OpsVoice, an expert AI assistant for cloud infrastructure operations. "
@@ -21,96 +20,122 @@ SYSTEM_PROMPT = (
     "Use plain language, short sentences. Speak like a senior SRE briefing their team."
 )
 
+BEARER_FALLBACK_CHAIN = [
+    ("us-west-2", MODEL_ID),
+    ("us-east-1", MODEL_ID),
+    ("us-west-2", MODEL_ID_FALLBACK),
+    ("us-east-1", MODEL_ID_FALLBACK),
+]
+
+
+def _bedrock_url(region: str, model_id: str) -> str:
+    return f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/invoke"
+
 
 class BedrockService:
-    """Calls Claude on AWS Bedrock using bearer token (primary) or ABSK key (fallback)."""
+    """
+    Calls Claude on AWS Bedrock.
+    Auth priority:
+      1. Bearer token  (hackathon primary)
+      2. boto3 SigV4   (IAM session creds)
+      3. ABSK chain    (personal backup key)
+    """
 
     def __init__(self, settings: Settings) -> None:
-        self._bearer_token = settings.aws_bearer_token_bedrock
-        self._absk_key = settings.aws_bedrock_api_key_backup
-        self._region = settings.aws_default_region
-        self._base_url = BEDROCK_RUNTIME_URL.format(region=self._region)
+        self._bearer_token  = settings.aws_bearer_token_bedrock
+        self._access_key    = settings.aws_access_key_id
+        self._secret_key    = settings.aws_secret_access_key
+        self._session_token = settings.aws_session_token
+        self._absk_key      = settings.aws_bedrock_api_key_backup
+        self._region        = settings.aws_default_region
 
         if self._bearer_token:
-            logger.info("BedrockService: initialized with PRIMARY bearer token")
-        elif self._absk_key:
-            logger.info("BedrockService: initialized with BACKUP ABSK key")
-        else:
-            logger.error("BedrockService: no credentials available")
+            logger.info("BedrockService: bearer token available")
+        if self._access_key and self._secret_key:
+            logger.info("BedrockService: IAM session creds available (boto3)")
+        if self._absk_key:
+            logger.info("BedrockService: ABSK backup key available")
 
     def invoke(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        """Send messages to Claude via Bedrock and return parsed response."""
-        if self._bearer_token:
-            return self._invoke_with_retry(self._invoke_bearer, messages)
-        elif self._absk_key:
-            return self._invoke_with_retry(self._invoke_absk, messages)
-        else:
-            raise RuntimeError("No AWS Bedrock credentials configured")
+        errors: list[str] = []
 
-    def _invoke_with_retry(self, fn, messages: list[dict]) -> dict[str, Any]:
-        """Retry the given invocation function with exponential backoff."""
-        last_exc: Exception | None = None
-        for attempt, delay in enumerate(RETRY_BACKOFF, start=1):
+        if self._bearer_token:
             try:
-                return fn(messages)
-            except RuntimeError as exc:
-                last_exc = exc
-                if attempt < MAX_RETRIES:
-                    logger.warning(
-                        "Bedrock attempt %d/%d failed (%s), retrying in %.1fs…",
-                        attempt, MAX_RETRIES, exc, delay,
-                    )
-                    time.sleep(delay)
-                else:
-                    logger.error("Bedrock failed after %d attempts: %s", MAX_RETRIES, exc)
-        raise last_exc  # type: ignore[misc]
+                return self._invoke_bearer_chain(messages)
+            except RuntimeError as e:
+                logger.warning("Bearer auth failed: %s", e)
+                errors.append(f"bearer: {e}")
+
+        if self._access_key and self._secret_key:
+            try:
+                return self._invoke_boto3(messages)
+            except Exception as e:
+                logger.warning("boto3 SigV4 failed: %s", e)
+                errors.append(f"boto3: {e}")
+
+        if self._absk_key:
+            try:
+                return self._invoke_absk_chain(messages)
+            except RuntimeError as e:
+                errors.append(f"absk: {e}")
+
+        raise RuntimeError(f"All Bedrock auth methods failed. Errors: {"; ".join(errors)}")
+
+    def _invoke_bearer_chain(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        last_err: Exception = RuntimeError("empty chain")
+        for region, model_id in BEARER_FALLBACK_CHAIN:
+            try:
+                return self._http_invoke(token=self._bearer_token, region=region, model_id=model_id, label=f"bearer/{region}", messages=messages)
+            except RuntimeError as e:
+                last_err = e
+        raise last_err
+
+    def _invoke_boto3(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        import boto3
+        body = self._build_body(messages)
+        for region, model_id in [(self._region, MODEL_ID), ("us-east-1", MODEL_ID), (self._region, MODEL_ID_FALLBACK)]:
+            try:
+                client = boto3.client("bedrock-runtime", region_name=region, aws_access_key_id=self._access_key, aws_secret_access_key=self._secret_key, aws_session_token=self._session_token or None)
+                logger.info("Bedrock [boto3/%s]: invoking %s", region, model_id)
+                response = client.invoke_model(modelId=model_id, body=json.dumps(body), contentType="application/json", accept="application/json")
+                data = json.loads(response["body"].read())
+                return self._parse_response(data)
+            except Exception as e:
+                err_str = str(e)
+                if any(k in err_str.lower() for k in ("not found", "access denied", "validation")):
+                    logger.debug("boto3 attempt failed (%s/%s): %s", region, model_id, err_str[:100])
+                    continue
+                raise RuntimeError(f"boto3 Bedrock error: {err_str[:200]}") from e
+        raise RuntimeError("boto3: no model/region combination succeeded")
+
+    def _invoke_absk_chain(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        last_err: Exception = RuntimeError("empty ABSK chain")
+        for region, model_id in BEARER_FALLBACK_CHAIN:
+            try:
+                return self._http_invoke(token=self._absk_key, region=region, model_id=model_id, label=f"absk/{region}", messages=messages)
+            except RuntimeError as e:
+                last_err = e
+        raise last_err
+
+    def _http_invoke(self, *, token: str, region: str, model_id: str, label: str, messages: list[dict[str, str]]) -> dict[str, Any]:
+        url = _bedrock_url(region, model_id)
+        body = self._build_body(messages)
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+        logger.info("Bedrock [%s]: %s", label, model_id)
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.post(url, json=body, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"{resp.status_code} [{label}]: {resp.text[:180]}")
+        return self._parse_response(resp.json())
 
     def _build_body(self, messages: list[dict]) -> dict:
-        return {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": MAX_TOKENS,
-            "system": SYSTEM_PROMPT,
-            "messages": messages,
-        }
-
-    def _invoke_bearer(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        url = f"{self._base_url}/model/{MODEL_ID}/invoke"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._bearer_token}",
-        }
-        logger.info("Bedrock [bearer]: invoking %s", MODEL_ID)
-        with httpx.Client(timeout=90.0) as client:
-            resp = client.post(url, json=self._build_body(messages), headers=headers)
-        if resp.status_code != 200:
-            logger.error("Bedrock error %d: %s", resp.status_code, resp.text[:500])
-            raise RuntimeError(f"Bedrock {resp.status_code}: {resp.text[:200]}")
-        return self._parse_response(resp.json())
-
-    def _invoke_absk(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        url = f"{self._base_url}/model/{MODEL_ID}/invoke"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Bedrock-Api-Key": self._absk_key,
-        }
-        logger.info("Bedrock [ABSK]: invoking %s", MODEL_ID)
-        with httpx.Client(timeout=90.0) as client:
-            resp = client.post(url, json=self._build_body(messages), headers=headers)
-        if resp.status_code != 200:
-            logger.error("Bedrock error %d: %s", resp.status_code, resp.text[:500])
-            raise RuntimeError(f"Bedrock {resp.status_code}: {resp.text[:200]}")
-        return self._parse_response(resp.json())
+        return {"anthropic_version": "bedrock-2023-05-31", "max_tokens": MAX_TOKENS, "system": SYSTEM_PROMPT, "messages": messages}
 
     @staticmethod
     def _parse_response(data: dict) -> dict[str, Any]:
         content_blocks = data.get("content", [])
         text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
-        content = "\n".join(text_parts) if text_parts else ""
+        content = "
+".join(text_parts) if text_parts else ""
         usage = data.get("usage", {})
-        return {
-            "content": content,
-            "model": data.get("model", MODEL_ID),
-            "input_tokens": usage.get("input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
-            "stop_reason": data.get("stop_reason", ""),
-        }
+        return {"content": content, "model": data.get("model", MODEL_ID), "input_tokens": usage.get("input_tokens", 0), "output_tokens": usage.get("output_tokens", 0), "stop_reason": data.get("stop_reason", "")}

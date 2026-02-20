@@ -71,6 +71,7 @@ class ChatResponse(BaseModel):
     response: str
     conversation_id: str
     model: str
+    model_provider: str = "unknown"
     tokens: TokenUsage
     latency_ms: float
 
@@ -85,6 +86,7 @@ class ServiceStatus(BaseModel):
     database: str = "unknown"
     bedrock: str = "unknown"
     minimax: str = "unknown"
+    datadog: str = "unknown"
 
 
 class HealthResponse(BaseModel):
