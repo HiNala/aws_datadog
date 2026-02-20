@@ -151,38 +151,117 @@ export default function DashboardPage() {
   })();
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
-      {/* Header */}
-      <div className="mb-8 animate-fade-in flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Observability Dashboard
-          </h1>
-          <p className="mt-1.5 text-sm text-foreground-muted">
-            Real-time service health and LLM metrics — auto-refreshes every 15s
-          </p>
-        </div>
+    <div style={{ background: "var(--surface)", minHeight: "calc(100vh - 3.5rem)" }}>
+      {/* ── Linear Hero ── */}
+      <div
+        className="relative overflow-hidden"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        {/* Subtle radial glow in hero */}
         <div
-          className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium ${
-            health?.status === "ok"
-              ? "border-success/25 bg-success/5 text-success"
-              : loading
-                ? "text-foreground-muted"
-                : "border-error/25 bg-error/5 text-error"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              health?.status === "ok"
-                ? "bg-success animate-pulse"
-                : loading
-                  ? "bg-foreground-muted"
-                  : "bg-error"
-            }`}
-          />
-          {loading ? "Connecting…" : health?.status === "ok" ? "All systems operational" : "Degraded"}
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 50% at 50% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent)",
+          }}
+        />
+
+        <div className="relative mx-auto max-w-5xl px-6 py-10">
+          <div className="flex items-center justify-between">
+            <div className="animate-fade-in">
+              {/* Eyebrow */}
+              <p
+                className="mb-2 text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: "var(--accent)" }}
+              >
+                OpsVoice &mdash; AI Operations Agent
+              </p>
+              <h1
+                className="text-2xl font-bold tracking-tight"
+                style={{ color: "var(--foreground)", letterSpacing: "-0.03em" }}
+              >
+                Observability Dashboard
+              </h1>
+              <p className="mt-1.5 text-sm" style={{ color: "var(--foreground-muted)" }}>
+                Real-time service health and LLM metrics &mdash; auto-refreshes every 15s
+              </p>
+            </div>
+
+            {/* System status pill */}
+            <div
+              className="flex shrink-0 items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-all"
+              style={{
+                background: health?.status === "ok"
+                  ? "color-mix(in srgb, var(--success) 10%, transparent)"
+                  : loading
+                    ? "var(--surface-hover)"
+                    : "color-mix(in srgb, var(--error) 10%, transparent)",
+                color: health?.status === "ok"
+                  ? "var(--success)"
+                  : loading
+                    ? "var(--foreground-muted)"
+                    : "var(--error)",
+                border: `1px solid ${health?.status === "ok"
+                  ? "color-mix(in srgb, var(--success) 25%, transparent)"
+                  : loading
+                    ? "var(--border)"
+                    : "color-mix(in srgb, var(--error) 25%, transparent)"}`,
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: health?.status === "ok"
+                    ? "var(--success)"
+                    : loading
+                      ? "var(--foreground-muted)"
+                      : "var(--error)",
+                  animation: health?.status === "ok" ? "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" : "none",
+                }}
+              />
+              {loading ? "Connecting…" : health?.status === "ok" ? "All systems operational" : "Degraded"}
+            </div>
+          </div>
+
+          {/* Quick-action strip */}
+          <div className="mt-6 flex gap-3">
+            <a
+              href="/voice"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
+              style={{
+                background: "var(--accent)",
+                color: "#fff",
+                boxShadow: "0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+              Launch Voice Agent
+            </a>
+            <a
+              href="/chat"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
+              style={{
+                background: "var(--surface-raised)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Open Chat
+            </a>
+          </div>
         </div>
       </div>
+
+      {/* ── Main content ── */}
+      <div className="mx-auto max-w-5xl px-6 py-8">
 
       {/* Backend error banner */}
       {error && (
