@@ -126,7 +126,7 @@ class MiniMaxTTS:
         )
         return audio_bytes
 
-    # ── Streaming (turbo model, raw binary chunks) ─────────────────────────
+    # ── Streaming (turbo model, SSE → raw MP3 binary) ──────────────────────
 
     def synthesize_stream(
         self,
@@ -136,8 +136,14 @@ class MiniMaxTTS:
     ) -> Iterator[bytes]:
         """
         Stream raw MP3 chunks. Uses speech-2.8-turbo for <250ms TTFA.
-        Yields bytes as they arrive — caller can pipe directly to HTTP response.
+
+        MiniMax streaming returns SSE lines like:
+            data: {"data":{"audio":"<hex-encoded-mp3>"},"trace_id":"...","base_resp":{"status_code":0,...}}
+        We parse each SSE event, extract the hex audio, decode to binary,
+        and yield raw MP3 bytes that can be piped directly to the browser.
         """
+        import json as _json
+
         payload = {
             "model": MODEL_TURBO,
             "text": text,
@@ -160,25 +166,39 @@ class MiniMaxTTS:
 
         logger.info("TTS stream: %d chars, voice=%s (turbo)", len(text), voice_id)
 
+        total = 0
         with httpx.Client(timeout=60.0) as client:
             with client.stream("POST", TTS_URL_UW, json=payload, headers=self._headers()) as response:
                 if response.status_code != 200:
                     raise RuntimeError(f"TTS stream returned {response.status_code}")
-                total = 0
-                first_chunk = True
-                for chunk in response.iter_bytes(chunk_size=2048):
-                    if chunk:
-                        if first_chunk:
-                            first_chunk = False
-                            # MiniMax returns JSON error with HTTP 200 — detect it
-                            if chunk[:1] == b"{" and b"status_code" in chunk:
-                                import json as _json
-                                try:
-                                    err = _json.loads(chunk)
-                                    msg = err.get("base_resp", {}).get("status_msg", "unknown TTS error")
-                                    raise RuntimeError(f"MiniMax TTS error: {msg}")
-                                except (ValueError, KeyError):
-                                    pass
-                        total += len(chunk)
-                        yield chunk
-                logger.info("TTS stream done: %d bytes total", total)
+
+                buf = ""
+                for raw in response.iter_text():
+                    buf += raw
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        json_str = line[5:].strip()
+                        if not json_str:
+                            continue
+                        try:
+                            evt = _json.loads(json_str)
+                        except _json.JSONDecodeError:
+                            continue
+
+                        # Check for error response
+                        base_resp = evt.get("base_resp", {})
+                        status_code = base_resp.get("status_code", 0)
+                        if status_code != 0:
+                            msg = base_resp.get("status_msg", "unknown TTS error")
+                            raise RuntimeError(f"MiniMax TTS error ({status_code}): {msg}")
+
+                        hex_audio = evt.get("data", {}).get("audio", "")
+                        if hex_audio:
+                            audio_bytes = bytes.fromhex(hex_audio)
+                            total += len(audio_bytes)
+                            yield audio_bytes
+
+        logger.info("TTS stream done: %d bytes decoded audio", total)
