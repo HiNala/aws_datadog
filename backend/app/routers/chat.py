@@ -15,6 +15,7 @@ from app.models import (
     TokenUsage,
 )
 from app.services.bedrock import BedrockService
+from app.services.datadog_obs import annotate, task_span, workflow_span
 
 logger = logging.getLogger("opsvoice.chat")
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -36,55 +37,77 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
 
     bedrock = _get_bedrock()
 
-    # Resolve or create conversation
-    conv_id = req.conversation_id or str(uuid.uuid4())
-    existing = db.query(ConversationRow).filter_by(id=conv_id).first()
-    if not existing:
-        db.add(ConversationRow(id=conv_id, title=req.message[:80]))
-        db.commit()
-
-    # Load recent history for context
-    history_rows = (
-        db.query(MessageRow)
-        .filter_by(conversation_id=conv_id)
-        .order_by(MessageRow.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    history_rows.reverse()
-
-    messages = [{"role": r.role, "content": r.content} for r in history_rows]
-    messages.append({"role": "user", "content": req.message})
-
-    # Call Bedrock
-    start = time.time()
-    try:
-        result = bedrock.invoke(messages)
-    except Exception as e:
-        logger.error("Bedrock invocation failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"LLM error: {e}")
-
-    latency_ms = round((time.time() - start) * 1000, 1)
-
-    response_text = result["content"]
-    input_tokens = result.get("input_tokens", 0)
-    output_tokens = result.get("output_tokens", 0)
-    model_id = result.get("model", "unknown")
-
-    # Persist user message + assistant response
-    db.add(MessageRow(conversation_id=conv_id, role="user", content=req.message))
-    db.add(
-        MessageRow(
-            conversation_id=conv_id,
-            role="assistant",
-            content=response_text,
-            model=model_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=latency_ms,
+    with workflow_span("opsvoice-chat-request"):
+        annotate(
+            input_data=req.message,
+            tags={"interface": "http", "env": "hackathon"},
         )
-    )
-    db.commit()
+
+        # Resolve or create conversation
+        conv_id = req.conversation_id or str(uuid.uuid4())
+
+        with task_span("resolve-conversation"):
+            existing = db.query(ConversationRow).filter_by(id=conv_id).first()
+            if not existing:
+                db.add(ConversationRow(id=conv_id, title=req.message[:80]))
+                db.commit()
+
+        # Load recent history for context
+        with task_span("load-history"):
+            history_rows = (
+                db.query(MessageRow)
+                .filter_by(conversation_id=conv_id)
+                .order_by(MessageRow.created_at.desc())
+                .limit(20)
+                .all()
+            )
+            history_rows.reverse()
+
+        messages = [{"role": r.role, "content": r.content} for r in history_rows]
+        messages.append({"role": "user", "content": req.message})
+
+        # Call Bedrock
+        start = time.time()
+        try:
+            with task_span("bedrock-invoke"):
+                result = bedrock.invoke(messages)
+        except Exception as e:
+            logger.error("Bedrock invocation failed: %s", e)
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
+        latency_ms = round((time.time() - start) * 1000, 1)
+
+        response_text = result["content"]
+        input_tokens = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+        model_id = result.get("model", "unknown")
+
+        # Persist user message + assistant response
+        with task_span("persist-messages"):
+            db.add(MessageRow(conversation_id=conv_id, role="user", content=req.message))
+            db.add(
+                MessageRow(
+                    conversation_id=conv_id,
+                    role="assistant",
+                    content=response_text,
+                    model=model_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+            )
+            db.commit()
+
+        annotate(
+            output_data=response_text,
+            tags={
+                "model": model_id,
+                "input_tokens": str(input_tokens),
+                "output_tokens": str(output_tokens),
+                "latency_ms": str(latency_ms),
+                "conversation_id": conv_id[:8],
+            },
+        )
 
     logger.info(
         "Chat response: %d input / %d output tokens, %.0fms, conv=%s",

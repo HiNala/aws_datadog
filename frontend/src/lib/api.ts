@@ -1,7 +1,10 @@
-const API_BASE =
-  typeof window !== "undefined"
-    ? ""
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// API_BASE is always "" on the client so requests go through Next.js rewrites (/api/*).
+// The rewrites proxy to the backend using the internal BACKEND_URL env var.
+const API_BASE = "";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface ChatResponse {
   response: string;
@@ -23,23 +26,76 @@ export interface HealthResponse {
   recent_messages: number;
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  message_count: number;
+  last_message: string | null;
+  created_at: string;
+}
+
+export interface ConversationsResponse {
+  conversations: ConversationSummary[];
+  total: number;
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number | null;
+  created_at: string | null;
+}
+
+export interface ConversationMessagesResponse {
+  conversation_id: string;
+  messages: ConversationMessage[];
+}
+
+export interface MetricsResponse {
+  total_messages: number;
+  total_conversations: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  avg_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  models_used: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, init);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Request failed: ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
 export async function sendChatMessage(
   message: string,
   conversationId: string | null = null
 ): Promise<ChatResponse> {
-  const res = await fetch(`${API_BASE}/api/chat`, {
+  return apiFetch<ChatResponse>("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, conversation_id: conversationId }),
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Chat failed: ${res.status}`);
-  }
-
-  return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// TTS
+// ---------------------------------------------------------------------------
 
 export async function getTextToSpeech(
   text: string,
@@ -60,12 +116,38 @@ export async function getTextToSpeech(
   return res.arrayBuffer();
 }
 
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
 export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_BASE}/api/health`);
+  return apiFetch<HealthResponse>("/api/health");
+}
 
-  if (!res.ok) {
-    throw new Error(`Health check failed: ${res.status}`);
-  }
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
 
-  return res.json();
+export async function listConversations(
+  limit = 20
+): Promise<ConversationsResponse> {
+  return apiFetch<ConversationsResponse>(
+    `/api/conversations?limit=${limit}`
+  );
+}
+
+export async function getConversationMessages(
+  conversationId: string
+): Promise<ConversationMessagesResponse> {
+  return apiFetch<ConversationMessagesResponse>(
+    `/api/conversations/${conversationId}/messages`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Metrics
+// ---------------------------------------------------------------------------
+
+export async function getMetrics(): Promise<MetricsResponse> {
+  return apiFetch<MetricsResponse>("/api/metrics");
 }
