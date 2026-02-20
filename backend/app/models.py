@@ -142,3 +142,92 @@ class MetricsResponse(BaseModel):
     avg_latency_ms: float | None
     p95_latency_ms: float | None
     models_used: list[str]
+
+
+# ---------------------------------------------------------------------------
+# Dual-Perspective Debate — ORM models
+# ---------------------------------------------------------------------------
+
+class DebateSessionRow(Base):
+    __tablename__ = "debate_sessions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    topic = Column(Text, nullable=False)
+    agent_a_name = Column(String, nullable=False)
+    agent_a_perspective = Column(Text, nullable=False)
+    agent_a_voice = Column(String, default="English_expressive_narrator")
+    agent_b_name = Column(String, nullable=False)
+    agent_b_perspective = Column(Text, nullable=False)
+    agent_b_voice = Column(String, default="English_calmness_narrator")
+    num_turns = Column(Integer, default=6)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    turns = relationship(
+        "DebateTurnRow",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="DebateTurnRow.turn_number",
+    )
+
+
+class DebateTurnRow(Base):
+    __tablename__ = "debate_turns"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(
+        String,
+        ForeignKey("debate_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_number = Column(Integer, nullable=False)
+    agent = Column(String, nullable=False)  # "a" or "b"
+    text = Column(Text, nullable=False)
+    model = Column(String, nullable=True)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    latency_ms = Column(Float, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    session = relationship("DebateSessionRow", back_populates="turns")
+
+
+# ---------------------------------------------------------------------------
+# Dual-Perspective Debate — Pydantic schemas
+# ---------------------------------------------------------------------------
+
+class DebateStartRequest(BaseModel):
+    topic: str
+    num_turns: int = 6
+
+
+class AgentProfile(BaseModel):
+    name: str
+    perspective: str
+    voice: str
+    color: str  # "indigo" or "amber"
+
+
+class DebateSessionResponse(BaseModel):
+    session_id: str
+    topic: str
+    agent_a: AgentProfile
+    agent_b: AgentProfile
+    num_turns: int
+
+
+class DebateTurnRequest(BaseModel):
+    turn_number: int
+
+
+class DebateTurnMeta(BaseModel):
+    session_id: str
+    turn_number: int
+    agent: str
+    text: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+    next_agent: str | None
+    is_final: bool

@@ -7,6 +7,7 @@ import {
   checkHealth,
   getMetrics,
   listConversations,
+  listDebateSessions,
   type HealthResponse,
   type MetricsResponse,
   type ConversationSummary,
@@ -108,24 +109,36 @@ function ActivityRow({ conv }: { conv: ConversationSummary }) {
 // Page
 // ---------------------------------------------------------------------------
 
+interface DebateSession {
+  session_id: string;
+  topic: string;
+  agent_a_name: string;
+  agent_b_name: string;
+  num_turns: number;
+  created_at: string | null;
+}
+
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [debates, setDebates] = useState<DebateSession[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const refresh = async () => {
     try {
-      const [h, m, c] = await Promise.all([
+      const [h, m, c, d] = await Promise.all([
         checkHealth(),
         getMetrics().catch(() => null),
         listConversations(10).catch(() => ({ conversations: [], total: 0 })),
+        listDebateSessions(5).catch(() => ({ sessions: [], total: 0 })),
       ]);
       setHealth(h);
       setMetrics(m);
       setConversations(c.conversations);
+      setDebates(d.sessions);
       setError(null);
       setLastRefresh(new Date());
     } catch (e: unknown) {
@@ -233,7 +246,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick-action strip */}
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 flex gap-3 flex-wrap">
             <a
               href="/voice"
               className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
@@ -249,6 +262,22 @@ export default function DashboardPage() {
                 <line x1="12" x2="12" y1="19" y2="22" />
               </svg>
               Launch Voice Agent
+            </a>
+            <a
+              href="/debate"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150"
+              style={{
+                background: "color-mix(in srgb, #f59e0b 12%, transparent)",
+                color: "#d97706",
+                border: "1px solid color-mix(in srgb, #f59e0b 25%, transparent)",
+                boxShadow: "0 2px 8px color-mix(in srgb, #f59e0b 20%, transparent)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M8 10h8" /><path d="M8 14h4" />
+              </svg>
+              Start a Debate
             </a>
             <a
               href="/chat"
@@ -545,7 +574,84 @@ export default function DashboardPage() {
         </div>
 
         {/* Right 1/3 — recent activity */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 space-y-6">
+
+          {/* Recent Debates */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
+                Recent Debates
+              </h2>
+              <Link href="/debate" className="text-[11px] font-medium hover:underline" style={{ color: "#d97706" }}>
+                New debate →
+              </Link>
+            </div>
+            <GlassCard className="p-4">
+              {loading ? (
+                <div className="space-y-3 py-2">
+                  {[...Array(2)].map((_, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="h-7 w-7 rounded-lg" style={{ background: "var(--surface-hover)" }} />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-3/4 rounded" style={{ background: "var(--surface-hover)" }} />
+                        <div className="h-2.5 w-1/2 rounded" style={{ background: "var(--surface-hover)" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : debates.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "color-mix(in srgb, #f59e0b 8%, transparent)" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#d97706", opacity: 0.7 }}>
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-medium text-foreground-muted">No debates yet</p>
+                  <Link href="/debate" className="mt-2 text-xs font-semibold hover:underline" style={{ color: "#d97706" }}>
+                    Start your first debate →
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  {debates.map((d) => (
+                    <Link
+                      key={d.session_id}
+                      href="/debate"
+                      className="flex items-start gap-3 py-3 last:border-0 transition-colors"
+                      style={{ borderBottom: "1px solid var(--border)" }}
+                    >
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, #f59e0b 10%, transparent)" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#d97706" }}>
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">{d.topic}</p>
+                        <p className="mt-0.5 text-[10px] text-foreground-muted">
+                          {d.agent_a_name} vs {d.agent_b_name} · {d.num_turns} turns
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-[10px] text-foreground-muted">{d.created_at ? timeAgo(d.created_at) : ""}</p>
+                    </Link>
+                  ))}
+                  <Link
+                    href="/debate"
+                    className="mt-3 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors"
+                    style={{ background: "var(--surface-hover)", color: "var(--foreground-muted)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+                  >
+                    Start new debate
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+                    </svg>
+                  </Link>
+                </>
+              )}
+            </GlassCard>
+          </div>
+
+          <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
               Recent Sessions
@@ -561,7 +667,7 @@ export default function DashboardPage() {
           <GlassCard className="p-4">
             {loading ? (
               <div className="space-y-3 py-2">
-                {[...Array(4)].map((_, i) => (
+                {[...Array(3)].map((_, i) => (
                   <div key={i} className="flex gap-3">
                     <div className="h-7 w-7 rounded-lg" style={{ background: "var(--surface-hover)" }} />
                     <div className="flex-1 space-y-1.5">
@@ -603,6 +709,7 @@ export default function DashboardPage() {
               </>
             )}
           </GlassCard>
+          </div>
         </div>
       </div>
       </div>

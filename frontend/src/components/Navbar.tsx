@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
   { href: "/chat", label: "Chat" },
   { href: "/voice", label: "Voice", accent: true },
+  { href: "/debate", label: "Debate", debate: true },
 ];
 
 function SunIcon() {
@@ -33,20 +34,35 @@ function NavLink({
   label,
   isActive,
   accent,
+  debate,
 }: {
   href: string;
   label: string;
   isActive: boolean;
   accent?: boolean;
+  debate?: boolean;
 }) {
+  const debateColor = "#f59e0b"; // amber
   const baseStyle: React.CSSProperties = {
-    color: isActive ? "var(--foreground)" : accent ? "var(--accent)" : "var(--foreground-muted)",
+    color: isActive
+      ? "var(--foreground)"
+      : accent
+        ? "var(--accent)"
+        : debate
+          ? debateColor
+          : "var(--foreground-muted)",
     background: isActive
       ? "var(--surface-active)"
       : accent
         ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-        : "transparent",
-    border: accent && !isActive ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)" : "1px solid transparent",
+        : debate
+          ? `color-mix(in srgb, ${debateColor} 8%, transparent)`
+          : "transparent",
+    border: accent && !isActive
+      ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)"
+      : debate && !isActive
+        ? `1px solid color-mix(in srgb, ${debateColor} 20%, transparent)`
+        : "1px solid transparent",
   };
 
   return (
@@ -58,7 +74,9 @@ function NavLink({
         if (!isActive) {
           (e.currentTarget as HTMLElement).style.background = accent
             ? "color-mix(in srgb, var(--accent) 14%, transparent)"
-            : "var(--surface-hover)";
+            : debate
+              ? `color-mix(in srgb, ${debateColor} 14%, transparent)`
+              : "var(--surface-hover)";
           (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
         }
       }}
@@ -66,10 +84,14 @@ function NavLink({
         if (!isActive) {
           (e.currentTarget as HTMLElement).style.background = accent
             ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-            : "transparent";
+            : debate
+              ? `color-mix(in srgb, ${debateColor} 8%, transparent)`
+              : "transparent";
           (e.currentTarget as HTMLElement).style.color = accent
             ? "var(--accent)"
-            : "var(--foreground-muted)";
+            : debate
+              ? debateColor
+              : "var(--foreground-muted)";
         }
       }}
     >
@@ -77,6 +99,12 @@ function NavLink({
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        </svg>
+      )}
+      {debate && (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <path d="M8 10h8" /><path d="M8 14h4" />
         </svg>
       )}
       {label}
@@ -119,6 +147,7 @@ export function Navbar() {
               label={item.label}
               isActive={pathname === item.href}
               accent={item.accent}
+              debate={"debate" in item ? item.debate : undefined}
             />
           ))}
 

@@ -212,3 +212,114 @@ export interface KeyTestResponse {
 export async function testKeysLive(): Promise<KeyTestResponse> {
   return apiFetch<KeyTestResponse>("/api/health/keys");
 }
+
+// ---------------------------------------------------------------------------
+// Dual-Perspective Debate
+// ---------------------------------------------------------------------------
+
+export interface AgentProfile {
+  name: string;
+  perspective: string;
+  voice: string;
+  color: "indigo" | "amber";
+}
+
+export interface DebateSessionResponse {
+  session_id: string;
+  topic: string;
+  agent_a: AgentProfile;
+  agent_b: AgentProfile;
+  num_turns: number;
+}
+
+export interface DebateTurnSSEEvent {
+  type: "thinking" | "text" | "done" | "error";
+  agent?: "a" | "b";
+  agent_name?: string;
+  turn?: number;
+  text?: string;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  latency_ms?: number;
+  is_final?: boolean;
+  next_agent?: "a" | "b" | null;
+  voice?: string;
+  message?: string;
+}
+
+export interface DebateSessionDetail {
+  session_id: string;
+  topic: string;
+  agent_a: AgentProfile;
+  agent_b: AgentProfile;
+  num_turns: number;
+  completed_turns: number;
+  turns: {
+    turn_number: number;
+    agent: "a" | "b";
+    text: string;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    latency_ms: number;
+  }[];
+  created_at: string | null;
+}
+
+/** Start a new debate session and receive agent profiles. */
+export async function startDebate(
+  topic: string,
+  numTurns = 6
+): Promise<DebateSessionResponse> {
+  return apiFetch<DebateSessionResponse>("/api/debate/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, num_turns: numTurns }),
+  });
+}
+
+/**
+ * Request a single debate turn. Returns an EventSource-compatible ReadableStream
+ * of SSE events. Parse each `data: {...}` line as JSON (DebateTurnSSEEvent).
+ */
+export async function streamDebateTurn(
+  sessionId: string,
+  turnNumber: number
+): Promise<ReadableStream<Uint8Array>> {
+  const res = await fetch(`${API_BASE}/api/debate/${sessionId}/turn`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ turn_number: turnNumber }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Debate turn failed: ${res.status}`);
+  }
+
+  if (!res.body) throw new Error("No response body for debate turn stream");
+  return res.body;
+}
+
+/** Retrieve full session detail with all completed turns. */
+export async function getDebateSession(
+  sessionId: string
+): Promise<DebateSessionDetail> {
+  return apiFetch<DebateSessionDetail>(`/api/debate/${sessionId}`);
+}
+
+/** List recent debate sessions. */
+export async function listDebateSessions(limit = 10): Promise<{
+  sessions: {
+    session_id: string;
+    topic: string;
+    agent_a_name: string;
+    agent_b_name: string;
+    num_turns: number;
+    created_at: string | null;
+  }[];
+  total: number;
+}> {
+  return apiFetch(`/api/debate/sessions/list?limit=${limit}`);
+}

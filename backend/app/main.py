@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.db import init_db
 from app.routers import chat, health, tts
-from app.routers import conversations, metrics
+from app.routers import conversations, metrics, debate
 from app.services.datadog_obs import setup_observability
 
 logging.basicConfig(
@@ -43,6 +43,7 @@ app.include_router(chat.router)
 app.include_router(tts.router)
 app.include_router(conversations.router)
 app.include_router(metrics.router)
+app.include_router(debate.router)
 
 
 @app.exception_handler(Exception)
