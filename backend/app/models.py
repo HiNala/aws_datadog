@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
 
 from app.db import Base
 
@@ -17,21 +18,39 @@ class ConversationRow(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String, default="New conversation")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    messages = relationship(
+        "MessageRow",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
 
 
 class MessageRow(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    conversation_id = Column(String, nullable=False, index=True)
+    conversation_id = Column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     model = Column(String, nullable=True)
-    input_tokens = Column(Integer, nullable=True)
-    output_tokens = Column(Integer, nullable=True)
+    input_tokens = Column(Integer, nullable=True, default=0)
+    output_tokens = Column(Integer, nullable=True, default=0)
     latency_ms = Column(Float, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conversation = relationship("ConversationRow", back_populates="messages")
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +112,22 @@ class ConversationSummary(BaseModel):
 class ConversationsResponse(BaseModel):
     conversations: list[ConversationSummary]
     total: int
+
+
+class ConversationMessage(BaseModel):
+    id: int
+    role: str
+    content: str
+    model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_ms: float | None = None
+    created_at: str | None = None
+
+
+class ConversationMessagesResponse(BaseModel):
+    conversation_id: str
+    messages: list[ConversationMessage]
 
 
 # ---------------------------------------------------------------------------

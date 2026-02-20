@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -82,8 +83,11 @@ def _infer(messages: list[dict]) -> dict:
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    if not req.message.strip():
+    message = req.message.strip()
+    if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if len(message) > 32_000:
+        raise HTTPException(status_code=400, detail="Message too long (max 32,000 chars)")
 
     with workflow_span("opsvoice-voice-pipeline"):
         annotate(
@@ -95,10 +99,12 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         conv_id = req.conversation_id or str(uuid.uuid4())
 
         with task_span("db-resolve-conversation"):
-            existing = db.query(ConversationRow).filter_by(id=conv_id).first()
-            if not existing:
-                db.add(ConversationRow(id=conv_id, title=req.message[:80]))
+            conv = db.query(ConversationRow).filter_by(id=conv_id).first()
+            if not conv:
+                conv = ConversationRow(id=conv_id, title=req.message[:80])
+                db.add(conv)
                 db.commit()
+                db.refresh(conv)
 
         # ── Load recent context ───────────────────────────────────────────
         with task_span("db-load-history"):
@@ -112,7 +118,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
             history_rows.reverse()
 
         messages = [{"role": r.role, "content": r.content} for r in history_rows]
-        messages.append({"role": "user", "content": req.message})
+        messages.append({"role": "user", "content": message})
 
         # ── Invoke LLM (Bedrock → MiniMax fallback) ───────────────────────
         start = time.time()
@@ -127,9 +133,9 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         latency_ms = round((time.time() - start) * 1000, 1)
 
         response_text = result["content"]
-        input_tokens   = result.get("input_tokens", 0)
-        output_tokens  = result.get("output_tokens", 0)
-        model_id       = result.get("model", "unknown")
+        input_tokens  = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+        model_id      = result.get("model", "unknown")
 
         # Determine display provider
         if model_id.startswith("minimax/"):
@@ -155,18 +161,24 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
 
         # ── Persist messages ──────────────────────────────────────────────
         with task_span("db-persist-messages"):
-            db.add(MessageRow(conversation_id=conv_id, role="user", content=req.message))
-            db.add(
-                MessageRow(
-                    conversation_id=conv_id,
-                    role="assistant",
-                    content=response_text,
-                    model=model_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-            )
+            now = datetime.now(timezone.utc)
+            db.add(MessageRow(
+                conversation_id=conv_id,
+                role="user",
+                content=req.message,
+                created_at=now,
+            ))
+            db.add(MessageRow(
+                conversation_id=conv_id,
+                role="assistant",
+                content=response_text,
+                model=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            ))
+            # Touch updated_at so sidebar sorts by last activity
+            conv.updated_at = now
             db.commit()
 
         annotate(

@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChatInput } from "@/components/ChatInput";
+import {
+  ChatInput,
+  ChatInputTextArea,
+  ChatInputSubmit,
+} from "@/components/ui/chat-input";
+import { VoiceBubble } from "@/components/ui/voice-bubble";
 import { ChatMessage } from "@/components/ChatMessage";
 import {
   sendChatMessage,
   listConversations,
   getConversationMessages,
+  getTextToSpeech,
   testKeysLive,
   type ChatResponse,
   type ConversationSummary,
@@ -184,41 +190,24 @@ function ConversationSidebar({
   onNew: () => void;
 }) {
   return (
-    <aside
-      className="flex w-60 shrink-0 flex-col"
-      style={{
-        background: "var(--surface-overlay)",
-        borderRight: "1px solid var(--border)",
-      }}
-    >
-      <div className="p-3">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl">
+      {/* New chat */}
+      <div className="p-2.5">
         <button
           onClick={onNew}
-          className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
-          style={{
-            color: "var(--foreground-muted)",
-            border: "1px solid var(--border)",
-            background: "var(--surface-raised)",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)";
-            (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)";
-            (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)";
-          }}
+          className="flex w-full items-center gap-2 rounded-xl border border-glass-border bg-glass-bg px-3 py-2 text-xs font-semibold text-foreground-muted transition-all hover:border-accent/20 hover:bg-accent/5 hover:text-foreground"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14" /><path d="M5 12h14" />
           </svg>
           New conversation
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-3">
+      {/* Conversation list */}
+      <div className="flex-1 overflow-y-auto px-1.5 pb-2">
         {conversations.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs" style={{ color: "var(--foreground-muted)" }}>
+          <p className="px-3 py-6 text-center text-[11px] text-foreground-muted">
             No conversations yet
           </p>
         ) : (
@@ -229,23 +218,27 @@ function ConversationSidebar({
                 <button
                   key={c.id}
                   onClick={() => onSelect(c.id)}
-                  className="w-full rounded-lg px-3 py-2.5 text-left transition-all duration-150"
-                  style={{
-                    background: isActive ? "var(--surface-active)" : "transparent",
-                    color: isActive ? "var(--foreground)" : "var(--foreground-muted)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent";
-                  }}
+                  className={`group w-full rounded-xl px-3 py-2.5 text-left transition-all ${
+                    isActive
+                      ? "bg-accent/12 border border-accent/20 text-foreground"
+                      : "border border-transparent text-foreground-muted hover:bg-white/4 hover:text-foreground"
+                  }`}
                 >
-                  <p className="truncate text-xs font-medium">{c.title}</p>
-                  {c.last_message && (
-                    <p className="mt-0.5 truncate text-[10px] opacity-60">{c.last_message}</p>
+                  {isActive && (
+                    <div className="mb-1 flex items-center gap-1.5">
+                      <span className="h-1 w-1 rounded-full bg-accent-light animate-pulse" />
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-accent-light">
+                        Active
+                      </span>
+                    </div>
                   )}
-                  <p className="mt-0.5 text-[10px] opacity-40">{c.message_count} messages</p>
+                  <p className="truncate text-[11px] font-medium leading-snug">{c.title}</p>
+                  {c.last_message && (
+                    <p className="mt-0.5 truncate text-[10px] opacity-55 leading-snug">
+                      {c.last_message}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[9px] opacity-40">{c.message_count} messages</p>
                 </button>
               );
             })}
@@ -253,7 +246,6 @@ function ConversationSidebar({
         )}
       </div>
 
-      {/* API Key Status — discrete dropdown at sidebar footer */}
       <ApiKeyPanel />
     </aside>
   );
@@ -266,9 +258,14 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [inputValue, setInputValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -278,7 +275,9 @@ export default function ChatPage() {
     try {
       const data = await listConversations(30);
       setConversations(data.conversations);
-    } catch { /* silent */ }
+    } catch {
+      // non-critical
+    }
   }, []);
 
   useEffect(() => { refreshConversations(); }, [refreshConversations]);
@@ -296,41 +295,111 @@ export default function ChatPage() {
         latencyMs: m.latency_ms ?? undefined,
       })));
       setConversationId(id);
-    } catch { /* silent */ }
+    } catch {
+      // non-critical
+    }
   }, []);
 
   const handleNew = useCallback(() => {
     setMessages([]);
     setConversationId(null);
+    setCurrentModel(null);
+    setError(null);
+    // Stop any playing TTS
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      setIsTTSPlaying(false);
+    }
   }, []);
 
-  const handleSend = useCallback(async (text: string) => {
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setIsLoading(true);
-    try {
-      const data: ChatResponse = await sendChatMessage(text, conversationId);
-      setConversationId(data.conversation_id);
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: data.response,
-        model: data.model,
-        modelProvider: data.model_provider,
-        tokens: data.tokens,
-        latencyMs: data.latency_ms,
-      }]);
-      refreshConversations();
-    } catch (e: unknown) {
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: `Error: ${e instanceof Error ? e.message : "Something went wrong"}`,
-      }]);
-    } finally {
-      setIsLoading(false);
+  /** Auto-play TTS for an assistant response */
+  const playTTS = useCallback(async (text: string) => {
+    // Stop previous TTS if any
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
     }
-  }, [conversationId, refreshConversations]);
+    setIsTTSPlaying(true);
+    try {
+      const audioBuffer = await getTextToSpeech(text);
+      const blob = new Blob([audioBuffer], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsTTSPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setIsTTSPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
+    } catch {
+      // TTS failure is non-fatal — user can still read the response
+      setIsTTSPlaying(false);
+    }
+  }, []);
+
+  const handleSend = useCallback(
+    async (text?: string) => {
+      const finalText = (text ?? inputValue).trim();
+      if (!finalText || isLoading) return;
+
+      setMessages((prev) => [...prev, { role: "user", content: finalText }]);
+      setInputValue("");
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const data: ChatResponse = await sendChatMessage(finalText, conversationId);
+        setConversationId(data.conversation_id);
+        setCurrentModel(data.model);
+
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: data.response,
+          model: data.model,
+          modelProvider: data.model_provider,
+          tokens: data.tokens,
+          latencyMs: data.latency_ms,
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
+        refreshConversations();
+
+        // Auto-play TTS response
+        playTTS(data.response);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Something went wrong";
+        setError(msg);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Sorry, I encountered an error: ${msg}` },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [conversationId, refreshConversations, inputValue, isLoading, playTTS]
+  );
+
+  const STARTERS = [
+    "Is api-gateway healthy?",
+    "What's the blast radius if postgres-main fails?",
+    "Any P1 incidents right now?",
+    "Summarize this week's alerts",
+  ];
+
+  const hasMessages = messages.length > 0;
+
+  // Friendly short model label for footer
+  const modelLabel = currentModel
+    ? (currentModel.split(".").pop()?.split("-").slice(0, 3).join("-") ?? currentModel)
+    : "Claude on Bedrock";
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]" style={{ background: "var(--surface)" }}>
+    <div className="flex h-[calc(100vh-3.5rem)]">
       {/* Sidebar */}
       {sidebarOpen && (
         <ConversationSidebar
@@ -341,16 +410,10 @@ export default function ChatPage() {
         />
       )}
 
-      {/* Chat area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Main */}
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Topbar */}
-        <div
-          className="flex items-center gap-3 px-4 py-2.5"
-          style={{
-            borderBottom: "1px solid var(--border)",
-            background: "var(--surface-raised)",
-          }}
-        >
+        <div className="flex items-center gap-2.5 border-b border-glass-border bg-surface/70 px-4 py-2 backdrop-blur-xl shrink-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             title="Toggle sidebar"
@@ -365,67 +428,105 @@ export default function ChatPage() {
               (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)";
             }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
 
-          <span className="text-sm font-medium" style={{ color: "var(--foreground-muted)" }}>
+          <span className="text-xs font-semibold text-foreground-muted">
             {conversationId ? "Conversation" : "New conversation"}
           </span>
 
           {conversationId && (
-            <span className="font-mono text-[10px] opacity-40" style={{ color: "var(--foreground-muted)" }}>
+            <span className="font-mono text-[9px] text-foreground-muted opacity-40">
               {conversationId.slice(0, 8)}
             </span>
           )}
+
+          <div className="ml-auto flex items-center gap-1.5 rounded-full border border-success/15 bg-success/6 px-2.5 py-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            <span className="text-[10px] font-semibold text-success">Live</span>
+          </div>
         </div>
 
+        {/* Error banner */}
+        {error && (
+          <div className="mx-4 mt-3 flex items-center gap-2.5 rounded-xl border border-error/25 bg-error/8 px-4 py-2.5 animate-fade-in">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-error">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <p className="text-xs text-error flex-1">{error}</p>
+            <button onClick={() => setError(null)} className="text-error/60 hover:text-error">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-8">
-          <div className="mx-auto max-w-2xl space-y-6">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-28 text-center animate-fade-in">
-                <div
-                  className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
-                  style={{ background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" x2="12" y1="19" y2="22" />
-                  </svg>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="mx-auto max-w-2xl space-y-5">
+            {/* Empty state */}
+            {!hasMessages && (
+              <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+                {/* Hero bubble */}
+                <div className="relative mb-7">
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: 96,
+                      height: 96,
+                      background:
+                        "radial-gradient(circle at 38% 32%, rgba(129,140,248,1) 0%, rgba(99,102,241,0.85) 30%, rgba(168,85,247,0.7) 60%, rgba(236,72,153,0.5) 85%, transparent 100%)",
+                      boxShadow:
+                        "inset 0 0 24px rgba(255,255,255,0.28), 0 0 48px rgba(99,102,241,0.35), 0 0 100px rgba(168,85,247,0.12)",
+                    }}
+                  />
+                  <div
+                    className="absolute inset-0 rounded-full pointer-events-none"
+                    style={{
+                      background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)",
+                      filter: "blur(18px)",
+                      transform: "scale(1.6)",
+                    }}
+                  />
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
-                  How can I help you?
-                </h2>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed" style={{ color: "var(--foreground-muted)" }}>
-                  Ask about your infrastructure, services, and incidents. Powered by Claude on AWS Bedrock with MiniMax M2.5 fallback.
+
+                <h2 className="text-xl font-bold tracking-tight text-foreground">OpsVoice</h2>
+                <p className="mt-2 max-w-xs text-sm leading-relaxed text-foreground-muted">
+                  Your AI operations assistant. Speak or type — ask about incidents,
+                  services, latency, or anything in your infrastructure.
                 </p>
-                <div className="mt-6 flex flex-wrap justify-center gap-2">
+
+                {/* Stack badges */}
+                <div className="mt-4 flex flex-wrap justify-center gap-1.5">
                   {[
-                    "Is api-gateway healthy?",
-                    "What's the blast radius if postgres fails?",
-                    "Any P1 incidents right now?",
-                  ].map((prompt) => (
+                    { label: "Claude on Bedrock", c: "#FF9900" },
+                    { label: "MiniMax TTS", c: "#818cf8" },
+                    { label: "Datadog LLM Obs", c: "#9b4dca" },
+                  ].map((b) => (
+                    <span
+                      key={b.label}
+                      className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                      style={{
+                        background: `${b.c}14`,
+                        border: `1px solid ${b.c}30`,
+                        color: b.c,
+                      }}
+                    >
+                      <span className="h-1 w-1 rounded-full" style={{ background: b.c }} />
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Starters */}
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {STARTERS.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => handleSend(prompt)}
                       disabled={isLoading}
-                      className="rounded-xl px-4 py-2 text-xs transition-all duration-150 disabled:opacity-40"
-                      style={{
-                        color: "var(--foreground-muted)",
-                        border: "1px solid var(--border)",
-                        background: "var(--surface-raised)",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)";
-                        (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)";
-                        (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)";
-                      }}
+                      className="rounded-xl border border-glass-border bg-glass-bg px-3.5 py-1.5 text-xs font-medium text-foreground-muted transition-all hover:border-accent/20 hover:bg-accent/5 hover:text-foreground disabled:opacity-40"
                     >
                       {prompt}
                     </button>
@@ -434,6 +535,7 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Messages */}
             {messages.map((msg, i) => (
               <ChatMessage
                 key={i}
@@ -446,42 +548,84 @@ export default function ChatPage() {
               />
             ))}
 
+            {/* Thinking indicator */}
             {isLoading && (
               <div className="flex gap-3 animate-fade-in">
-                <div
-                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-                  style={{ background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 border border-accent/20">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-light">
                     <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" x2="12" y1="19" y2="22" />
                   </svg>
                 </div>
-                <div className="flex items-center gap-1.5 py-1">
-                  {[0, 150, 300].map((delay) => (
-                    <span
-                      key={delay}
-                      className="h-2 w-2 rounded-full animate-pulse"
-                      style={{ background: "var(--foreground-muted)", animationDelay: `${delay}ms` }}
-                    />
-                  ))}
+                <div className="py-3 px-1">
+                  <div className="flex items-center gap-1">
+                    {[0, 150, 300].map((delay) => (
+                      <span
+                        key={delay}
+                        className="h-1.5 w-1.5 rounded-full bg-accent/60 animate-pulse"
+                        style={{ animationDelay: `${delay}ms` }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Input */}
-        <div
-          className="px-4 py-4"
-          style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}
-        >
+        {/* Input area */}
+        <div className="border-t border-glass-border bg-surface/85 px-4 pt-3 pb-2 backdrop-blur-xl shrink-0">
           <div className="mx-auto max-w-2xl">
-            <ChatInput onSend={handleSend} disabled={isLoading} />
-            <p className="mt-2 text-center text-[11px]" style={{ color: "var(--foreground-muted)" }}>
-              Claude on AWS Bedrock &middot; MiniMax TTS &middot; Datadog LLM Observability
-            </p>
+            <div className="flex items-end gap-3">
+              {/* Voice bubble */}
+              <div className="shrink-0 pb-1">
+                <VoiceBubble
+                  size={50}
+                  isResponding={isLoading || isTTSPlaying}
+                  responseIntensity={isLoading || isTTSPlaying ? 0.85 : 0.35}
+                  onTranscript={handleSend}
+                  className="select-none"
+                />
+              </div>
+
+              {/* Text input */}
+              <div className="flex-1 min-w-0">
+                <ChatInput
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onSubmit={() => handleSend()}
+                  loading={isLoading}
+                  onStop={() => setIsLoading(false)}
+                >
+                  <ChatInputTextArea
+                    placeholder={hasMessages ? "Reply…" : "Ask about your infrastructure…"}
+                    disabled={isLoading}
+                  />
+                  <ChatInputSubmit />
+                </ChatInput>
+              </div>
+            </div>
+
+            {/* Input footer: model name left, waveform indicator right */}
+            <div className="mt-1.5 flex items-center justify-between px-1">
+              <span className="text-[10px] text-foreground-muted opacity-50 font-mono truncate max-w-[200px]">
+                {modelLabel}
+              </span>
+              {/* Waveform bars — animate when TTS playing */}
+              <span className="flex items-end gap-px h-3 opacity-40">
+                {[55, 100, 70, 85, 45].map((h, i) => (
+                  <span
+                    key={i}
+                    className={`w-0.5 rounded-full bg-foreground-muted ${isTTSPlaying ? "animate-pulse" : ""}`}
+                    style={{
+                      height: `${h}%`,
+                      animationDelay: isTTSPlaying ? `${i * 0.1}s` : undefined,
+                    }}
+                  />
+                ))}
+              </span>
+            </div>
           </div>
         </div>
       </div>

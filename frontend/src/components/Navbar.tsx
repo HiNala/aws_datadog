@@ -141,6 +141,26 @@ export function Navbar() {
             {theme === "light" ? <MoonIcon /> : <SunIcon />}
           </button>
         </div>
+
+        {/* Right: stack pill */}
+        <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-glass-border bg-glass-bg px-3 py-1">
+          {[
+            { label: "Bedrock", color: "#FF9900" },
+            { label: "MiniMax", color: "#818cf8" },
+            { label: "Datadog", color: "#9b4dca" },
+          ].map((s) => (
+            <span
+              key={s.label}
+              className="flex items-center gap-1 text-[10px] font-medium text-foreground-muted"
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: s.color, boxShadow: `0 0 4px ${s.color}80` }}
+              />
+              {s.label}
+            </span>
+          ))}
+        </div>
       </div>
     </nav>
   );

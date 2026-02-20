@@ -17,6 +17,7 @@ export function VoiceButton({ text }: VoiceButtonProps) {
       setState("idle");
       return;
     }
+    if (state === "loading") return;
 
     setState("loading");
     try {
@@ -42,33 +43,42 @@ export function VoiceButton({ text }: VoiceButtonProps) {
   return (
     <button
       onClick={handleClick}
-      disabled={isLoading}
-      title={isPlaying ? "Stop" : "Speak response"}
-      className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium transition-all duration-150"
-      style={{
-        color: isPlaying ? "var(--accent)" : "var(--foreground-muted)",
-        background: isPlaying
-          ? "color-mix(in srgb, var(--accent) 10%, transparent)"
-          : "var(--surface-hover)",
-        opacity: isLoading ? 0.6 : 1,
-      }}
+      disabled={state === "loading"}
+      title={
+        state === "playing"
+          ? "Stop audio"
+          : state === "loading"
+          ? "Loading audio…"
+          : "Play response aloud"
+      }
+      className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-150 ${
+        state === "playing"
+          ? "text-accent-light hover:bg-accent/15"
+          : "text-foreground-muted hover:bg-white/6 hover:text-foreground"
+      } disabled:cursor-wait disabled:opacity-50`}
     >
-      {isLoading ? (
-        <svg width="11" height="11" viewBox="0 0 24 24" className="animate-spin">
-          <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray="60" strokeDashoffset="20" />
+      {state === "loading" ? (
+        <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-      ) : isPlaying ? (
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="6" y="4" width="4" height="16" />
-          <rect x="14" y="4" width="4" height="16" />
-        </svg>
+      ) : state === "playing" ? (
+        /* Animated waveform icon while playing */
+        <span className="flex items-end gap-px h-3">
+          {[60, 100, 75].map((h, i) => (
+            <span
+              key={i}
+              className="w-0.5 rounded-full bg-accent-light animate-pulse"
+              style={{ height: `${h}%`, animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </span>
       ) : (
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        /* Speaker icon */
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
         </svg>
       )}
-      {isLoading ? "Loading…" : isPlaying ? "Stop" : "Speak"}
     </button>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { VoiceButton } from "./VoiceButton";
 
 interface ChatMessageProps {
@@ -40,6 +41,17 @@ export function ChatMessage({
   role, content, model, modelProvider, tokens, latencyMs,
 }: ChatMessageProps) {
   const isUser = role === "user";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard not available
+    }
+  }, [content]);
 
   if (isUser) {
     return (
@@ -80,6 +92,22 @@ export function ChatMessage({
         {/* Meta row */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <VoiceButton text={content} />
+          {/* Copy button */}
+          <button
+            onClick={handleCopy}
+            title="Copy to clipboard"
+            className="flex h-5 w-5 items-center justify-center rounded transition-colors"
+            style={{ color: copied ? "var(--success)" : "var(--foreground-muted)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = copied ? "var(--success)" : "var(--foreground-muted)"; }}
+          >
+            {copied ? (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+            )}
+          </button>
+
           {modelProvider && <ProviderPill provider={modelProvider} model={model} />}
           {latencyMs != null && (
             <span className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>

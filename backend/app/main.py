@@ -1,13 +1,15 @@
 import logging
 import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.db import init_db
 from app.routers import chat, health, tts
 from app.routers import conversations, metrics
+from app.services.datadog_obs import setup_observability
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,8 +34,8 @@ app.add_middleware(
         "http://frontend:3000",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 app.include_router(health.router)
@@ -41,6 +43,12 @@ app.include_router(chat.router)
 app.include_router(tts.router)
 app.include_router(conversations.router)
 app.include_router(metrics.router)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.on_event("startup")
@@ -52,6 +60,7 @@ async def startup():
     settings.log_key_status()
     init_db()
     logger.info("Database initialized")
+    setup_observability()
     logger.info("=" * 60)
 
 
