@@ -605,6 +605,7 @@ export default function DashboardPage() {
           </GlassCard>
         </div>
       </div>
+      </div>
     </div>
   );
 }
