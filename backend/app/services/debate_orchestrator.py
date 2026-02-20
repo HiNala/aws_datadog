@@ -35,7 +35,19 @@ def _get_minimax() -> MiniMaxChat:
 
 
 def _infer(messages: list[dict]) -> dict:
-    """LLM inference with Bedrock → MiniMax fallback (mirrors chat router logic)."""
+    """LLM inference with Bedrock → MiniMax fallback (mirrors chat router logic).
+    
+    Automatically extracts any system-role messages and passes them as the
+    separate `system` parameter required by the Anthropic Messages API.
+    """
+    system: str | None = None
+    user_messages: list[dict] = []
+    for m in messages:
+        if m["role"] == "system":
+            system = m["content"]
+        else:
+            user_messages.append(m)
+
     settings = get_settings()
     errors: list[str] = []
 
@@ -46,7 +58,7 @@ def _infer(messages: list[dict]) -> dict:
     )
     if has_aws:
         try:
-            return _get_bedrock().invoke(messages)
+            return _get_bedrock().invoke(user_messages, system=system)
         except Exception as e:
             logger.warning("Bedrock failed for debate, trying MiniMax: %s", str(e)[:100])
             errors.append(f"bedrock: {str(e)[:60]}")
@@ -54,7 +66,7 @@ def _infer(messages: list[dict]) -> dict:
     mm = _get_minimax()
     if mm.is_available():
         try:
-            return mm.invoke(messages)
+            return mm.invoke(user_messages, system=system)
         except Exception as e:
             errors.append(f"minimax: {str(e)[:60]}")
 

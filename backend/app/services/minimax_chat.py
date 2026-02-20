@@ -51,9 +51,14 @@ class MiniMaxChat:
     def is_available(self) -> bool:
         return bool(self._api_key)
 
-    def invoke(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def invoke(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
         """
         Invoke MiniMax M2.5 with the given messages.
+
+        Args:
+            messages: List of user/assistant messages (no system role).
+            system: Optional system prompt override. Falls back to SYSTEM_PROMPT.
+
         Returns: {"content", "model", "input_tokens", "output_tokens", "stop_reason"}
         """
         if not self._api_key:
@@ -64,13 +69,11 @@ class MiniMaxChat:
         except ImportError as e:
             raise RuntimeError("anthropic package not installed") from e
 
-        # Use low-latency UW endpoint
         client = anthropic.Anthropic(
             base_url=MINIMAX_BASE_URL_UW,
             api_key=self._api_key,
         )
 
-        # Convert messages to Anthropic format
         anthropic_messages = []
         for m in messages:
             anthropic_messages.append({
@@ -86,7 +89,7 @@ class MiniMaxChat:
                 response = client.messages.create(
                     model=model,
                     max_tokens=MAX_TOKENS,
-                    system=SYSTEM_PROMPT,
+                    system=system or SYSTEM_PROMPT,
                     messages=anthropic_messages,
                 )
 

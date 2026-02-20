@@ -78,15 +78,20 @@ class BedrockService:
         logger.info("  Bearer (event):      %s", "PRESENT" if self._bearer_token else "MISSING")
         logger.info("  IAM session (boto3): %s", "PRESENT" if self._access_key else "MISSING")
 
-    def invoke(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        """Try auth methods in order; log which key fires."""
+    def invoke(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
+        """Try auth methods in order; log which key fires.
+        
+        Args:
+            messages: List of user/assistant messages (no system role).
+            system: Optional system prompt override. Falls back to SYSTEM_PROMPT.
+        """
         errors: list[str] = []
 
-        # 1. ABSK — personal account, currently working ✅
+        # 1. ABSK — personal account, currently working
         if self._absk_key:
             logger.info("[KEY] Trying ABSK (personal, account 655366068864) …")
             try:
-                result = self._invoke_absk_chain(messages)
+                result = self._invoke_absk_chain(messages, system=system)
                 logger.info("[KEY] SUCCESS via ABSK — model: %s", result.get("model", "?"))
                 return result
             except RuntimeError as e:
@@ -97,7 +102,7 @@ class BedrockService:
         if self._bearer_token:
             logger.info("[KEY] Trying event bearer token (account 283845804869) …")
             try:
-                result = self._invoke_bearer_chain(messages)
+                result = self._invoke_bearer_chain(messages, system=system)
                 logger.info("[KEY] SUCCESS via event bearer token")
                 return result
             except RuntimeError as e:
@@ -108,7 +113,7 @@ class BedrockService:
         if self._access_key and self._secret_key:
             logger.info("[KEY] Trying IAM boto3 (account 283845804869) …")
             try:
-                result = self._invoke_boto3(messages)
+                result = self._invoke_boto3(messages, system=system)
                 logger.info("[KEY] SUCCESS via IAM boto3")
                 return result
             except Exception as e:
@@ -124,7 +129,7 @@ class BedrockService:
 
     # ── ABSK chain ─────────────────────────────────────────────────────────────
 
-    def _invoke_absk_chain(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def _invoke_absk_chain(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
         """
         Use ABSK_FALLBACK_CHAIN.
         NOTE: 'use case details' errors may be region-specific due to cross-region inference
@@ -140,6 +145,7 @@ class BedrockService:
                     model_id=model_id,
                     label=f"absk/{region}",
                     messages=messages,
+                    system=system,
                 )
                 logger.info("[KEY] ABSK ok: %s @%s", model_id.split(".")[-1][:35], region)
                 return result
@@ -155,7 +161,7 @@ class BedrockService:
 
     # ── Bearer token chain ─────────────────────────────────────────────────────
 
-    def _invoke_bearer_chain(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def _invoke_bearer_chain(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
         last_err: Exception = RuntimeError("empty bearer chain")
         seen_blocked: set[str] = set()
         for region, model_id in BEARER_FALLBACK_CHAIN:
@@ -168,6 +174,7 @@ class BedrockService:
                     model_id=model_id,
                     label=f"bearer/{region}",
                     messages=messages,
+                    system=system,
                 )
             except RuntimeError as e:
                 err_str = str(e)
@@ -187,9 +194,9 @@ class BedrockService:
 
     # ── boto3 SigV4 ────────────────────────────────────────────────────────────
 
-    def _invoke_boto3(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def _invoke_boto3(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
         import boto3
-        body = self._build_body(messages)
+        body = self._build_body(messages, system=system)
         chain = [
             ("us-west-2", MODEL_SONNET_46),
             ("us-east-1", MODEL_SONNET_46),
@@ -230,9 +237,10 @@ class BedrockService:
         model_id: str,
         label: str,
         messages: list[dict[str, str]],
+        system: str | None = None,
     ) -> dict[str, Any]:
         url = _bedrock_url(region, model_id)
-        body = self._build_body(messages)
+        body = self._build_body(messages, system=system)
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
         logger.info("Bedrock [%s]: %s", label, model_id)
         with httpx.Client(timeout=30.0) as client:
@@ -241,11 +249,11 @@ class BedrockService:
             raise RuntimeError(f"{resp.status_code} [{label}]: {resp.text[:180]}")
         return self._parse_response(resp.json())
 
-    def _build_body(self, messages: list[dict]) -> dict:
+    def _build_body(self, messages: list[dict], system: str | None = None) -> dict:
         return {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": MAX_TOKENS,
-            "system": SYSTEM_PROMPT,
+            "system": system or SYSTEM_PROMPT,
             "messages": messages,
         }
 

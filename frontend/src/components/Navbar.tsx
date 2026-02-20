@@ -8,8 +8,6 @@ import { LogoIcon } from "@/components/Logo";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
   { href: "/chat", label: "Chat" },
-  { href: "/voice", label: "Voice", accent: true },
-  { href: "/debate", label: "Debate", debate: true },
 ];
 
 function SunIcon() {
@@ -29,89 +27,6 @@ function MoonIcon() {
   );
 }
 
-function NavLink({
-  href,
-  label,
-  isActive,
-  accent,
-  debate,
-}: {
-  href: string;
-  label: string;
-  isActive: boolean;
-  accent?: boolean;
-  debate?: boolean;
-}) {
-  const debateColor = "#f59e0b"; // amber
-  const baseStyle: React.CSSProperties = {
-    color: isActive
-      ? "var(--foreground)"
-      : accent
-        ? "var(--accent)"
-        : debate
-          ? debateColor
-          : "var(--foreground-muted)",
-    background: isActive
-      ? "var(--surface-active)"
-      : accent
-        ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-        : debate
-          ? `color-mix(in srgb, ${debateColor} 8%, transparent)`
-          : "transparent",
-    border: accent && !isActive
-      ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)"
-      : debate && !isActive
-        ? `1px solid color-mix(in srgb, ${debateColor} 20%, transparent)`
-        : "1px solid transparent",
-  };
-
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all duration-150"
-      style={baseStyle}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.background = accent
-            ? "color-mix(in srgb, var(--accent) 14%, transparent)"
-            : debate
-              ? `color-mix(in srgb, ${debateColor} 14%, transparent)`
-              : "var(--surface-hover)";
-          (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.background = accent
-            ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-            : debate
-              ? `color-mix(in srgb, ${debateColor} 8%, transparent)`
-              : "transparent";
-          (e.currentTarget as HTMLElement).style.color = accent
-            ? "var(--accent)"
-            : debate
-              ? debateColor
-              : "var(--foreground-muted)";
-        }
-      }}
-    >
-      {accent && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-        </svg>
-      )}
-      {debate && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          <path d="M8 10h8" /><path d="M8 14h4" />
-        </svg>
-      )}
-      {label}
-    </Link>
-  );
-}
-
 export function Navbar() {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
@@ -124,8 +39,7 @@ export function Navbar() {
         borderBottom: "1px solid var(--border)",
       }}
     >
-      <div className="mx-auto flex h-full max-w-5xl items-center justify-between px-5">
-        {/* Logo */}
+      <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-5">
         <Link href="/" className="flex items-center gap-2.5 group">
           <div style={{ color: "var(--accent)" }}>
             <LogoIcon size={28} />
@@ -138,57 +52,34 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Nav + toggle */}
         <div className="flex items-center gap-1">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              isActive={pathname === item.href}
-              accent={item.accent}
-              debate={"debate" in item ? item.debate : undefined}
-            />
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all duration-150"
+                style={{
+                  color: active ? "var(--foreground)" : "var(--foreground-muted)",
+                  background: active ? "var(--surface-active)" : "transparent",
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
 
-          <span className="mx-1.5 h-4 w-px" style={{ background: "var(--border)" }} />
+          <span className="mx-2 h-4 w-px" style={{ background: "var(--border)" }} />
 
           <button
             onClick={toggle}
             title={theme === "light" ? "Dark mode" : "Light mode"}
             className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150"
             style={{ color: "var(--foreground-muted)" }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)";
-              (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-              (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)";
-            }}
           >
             {theme === "light" ? <MoonIcon /> : <SunIcon />}
           </button>
-        </div>
-
-        {/* Right: stack pill */}
-        <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-glass-border bg-glass-bg px-3 py-1">
-          {[
-            { label: "Bedrock", color: "#FF9900" },
-            { label: "MiniMax", color: "#818cf8" },
-            { label: "Datadog", color: "#9b4dca" },
-          ].map((s) => (
-            <span
-              key={s.label}
-              className="flex items-center gap-1 text-[10px] font-medium text-foreground-muted"
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: s.color, boxShadow: `0 0 4px ${s.color}80` }}
-              />
-              {s.label}
-            </span>
-          ))}
         </div>
       </div>
     </nav>
