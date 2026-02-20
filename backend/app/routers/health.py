@@ -81,7 +81,7 @@ def test_keys_live():
             "messages": [{"role": "user", "content": "Say OK"}],
         }
         MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
-        MODEL_FB = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        MODEL_FB = "us.anthropic.claude-3-5-haiku-20241022-v1:0"   # ABSK confirmed PASS
         errors: list[str] = []
 
         def _http_quick(token: str, region: str, model: str, label: str):
@@ -137,9 +137,11 @@ def test_keys_live():
             except ImportError:
                 errors.append("boto3 not installed")
 
-        # 3. ABSK backup — quick test
+        # 3. ABSK — test confirmed-working models first (Haiku 3.5 PASS in both regions)
         if settings.aws_bedrock_api_key_backup:
-            r = _http_quick(settings.aws_bedrock_api_key_backup, "us-east-1", MODEL, "absk")
+            r = _http_quick(settings.aws_bedrock_api_key_backup, "us-east-1", MODEL_FB, "absk")
+            if r: return r
+            r = _http_quick(settings.aws_bedrock_api_key_backup, "us-west-2", MODEL_FB, "absk")
             if r: return r
 
         return {"status": "error", "error": "All auth failed", "details": errors[:3]}
