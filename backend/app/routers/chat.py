@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -32,14 +33,17 @@ def _get_bedrock() -> BedrockService:
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    if not req.message.strip():
+    message = req.message.strip()
+    if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if len(message) > 32_000:
+        raise HTTPException(status_code=400, detail="Message too long (max 32,000 chars)")
 
     bedrock = _get_bedrock()
 
     with workflow_span("opsvoice-chat-request"):
         annotate(
-            input_data=req.message,
+            input_data=message,
             tags={"interface": "http", "env": "hackathon"},
         )
 
@@ -47,12 +51,14 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         conv_id = req.conversation_id or str(uuid.uuid4())
 
         with task_span("resolve-conversation"):
-            existing = db.query(ConversationRow).filter_by(id=conv_id).first()
-            if not existing:
-                db.add(ConversationRow(id=conv_id, title=req.message[:80]))
+            conv = db.query(ConversationRow).filter_by(id=conv_id).first()
+            if not conv:
+                conv = ConversationRow(id=conv_id, title=message[:80])
+                db.add(conv)
                 db.commit()
+                db.refresh(conv)
 
-        # Load recent history for context
+        # Load recent history for context (last 20 turns, newest-first then reversed)
         with task_span("load-history"):
             history_rows = (
                 db.query(MessageRow)
@@ -64,7 +70,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
             history_rows.reverse()
 
         messages = [{"role": r.role, "content": r.content} for r in history_rows]
-        messages.append({"role": "user", "content": req.message})
+        messages.append({"role": "user", "content": message})
 
         # Call Bedrock
         start = time.time()
@@ -82,20 +88,26 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         output_tokens = result.get("output_tokens", 0)
         model_id = result.get("model", "unknown")
 
-        # Persist user message + assistant response
+        # Persist user message + assistant response, bump conversation updated_at
         with task_span("persist-messages"):
-            db.add(MessageRow(conversation_id=conv_id, role="user", content=req.message))
-            db.add(
-                MessageRow(
-                    conversation_id=conv_id,
-                    role="assistant",
-                    content=response_text,
-                    model=model_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-            )
+            now = datetime.now(timezone.utc)
+            db.add(MessageRow(
+                conversation_id=conv_id,
+                role="user",
+                content=message,
+                created_at=now,
+            ))
+            db.add(MessageRow(
+                conversation_id=conv_id,
+                role="assistant",
+                content=response_text,
+                model=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            ))
+            # Touch updated_at so sidebar sorts correctly
+            conv.updated_at = now
             db.commit()
 
         annotate(
@@ -110,7 +122,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         )
 
     logger.info(
-        "Chat response: %d input / %d output tokens, %.0fms, conv=%s",
+        "Chat response: %d in / %d out tokens, %.0fms, conv=%s",
         input_tokens,
         output_tokens,
         latency_ms,

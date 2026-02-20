@@ -23,8 +23,9 @@ export function ChatMessage({
     <div
       className={`flex gap-3 animate-slide-up ${isUser ? "justify-end" : "justify-start"}`}
     >
+      {/* Assistant avatar */}
       {!isUser && (
-        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent/15">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 border border-accent/20">
           <svg
             width="14"
             height="14"
@@ -43,44 +44,52 @@ export function ChatMessage({
         </div>
       )}
 
-      <div className={`max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
+      <div className={`flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"} max-w-[78%]`}>
+        {/* Bubble */}
         <div
           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isUser
-              ? "bg-accent/15 text-foreground"
-              : "border border-glass-border bg-glass-bg text-foreground backdrop-blur-xl"
+              ? "bg-accent/20 text-foreground rounded-tr-sm border border-accent/15"
+              : "border border-glass-border bg-glass-bg text-foreground backdrop-blur-xl rounded-tl-sm"
           }`}
         >
-          <p className="whitespace-pre-wrap">{content}</p>
+          <p className="whitespace-pre-wrap break-words">{content}</p>
         </div>
 
+        {/* Metadata row — only for assistant */}
         {!isUser && (
-          <div className="mt-2 flex items-center gap-3">
+          <div className="flex items-center gap-2 px-1">
             <VoiceButton text={content} />
-            {model && (
-              <span className="text-[10px] text-foreground-muted">
-                {model}
-              </span>
-            )}
-            {latencyMs != null && (
-              <span className="text-[10px] text-foreground-muted">
-                {Math.round(latencyMs)}ms
-              </span>
-            )}
-            {tokens && (
-              <span className="text-[10px] text-foreground-muted">
-                {tokens.input + tokens.output} tokens
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {latencyMs != null && (
+                <span className="flex items-center gap-1 text-[10px] text-foreground-muted">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {Math.round(latencyMs)}ms
+                </span>
+              )}
+              {tokens && (
+                <span className="text-[10px] text-foreground-muted">
+                  {(tokens.input + tokens.output).toLocaleString()} tok
+                </span>
+              )}
+              {model && (
+                <span className="truncate max-w-[120px] text-[10px] text-foreground-muted opacity-60 font-mono">
+                  {model.split(".").pop()?.split("-").slice(0, 3).join("-") ?? model}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
 
+      {/* User avatar */}
       {isUser && (
-        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/8">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/6 border border-white/8">
           <svg
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

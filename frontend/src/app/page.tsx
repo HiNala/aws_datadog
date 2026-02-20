@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
 import {
   checkHealth,
@@ -12,20 +13,23 @@ import {
 } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Atoms
 // ---------------------------------------------------------------------------
 
 function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "ok"
-      ? "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]"
-      : status === "error"
-        ? "bg-error shadow-[0_0_8px_rgba(239,68,68,0.5)]"
-        : "bg-warning shadow-[0_0_8px_rgba(234,179,8,0.5)]";
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />;
+  const map: Record<string, string> = {
+    ok: "bg-success shadow-[0_0_6px_rgba(34,197,94,0.6)]",
+    error: "bg-error shadow-[0_0_6px_rgba(239,68,68,0.6)]",
+    unknown: "bg-foreground-muted animate-pulse",
+  };
+  return (
+    <span
+      className={`inline-block h-2 w-2 rounded-full shrink-0 ${map[status] ?? map.unknown}`}
+    />
+  );
 }
 
-function MetricCard({
+function Metric({
   label,
   value,
   sub,
@@ -38,64 +42,58 @@ function MetricCard({
 }) {
   return (
     <GlassCard className="p-5" hover>
-      <p className="text-xs font-medium uppercase tracking-wider text-foreground-muted">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
         {label}
       </p>
       <p
-        className={`mt-2 text-2xl font-semibold tracking-tight ${accent ? "text-accent-light" : "text-foreground"}`}
+        className={`mt-2.5 text-2xl font-bold tracking-tight tabular-nums ${
+          accent ? "text-accent-light" : "text-foreground"
+        }`}
       >
         {value}
       </p>
-      {sub && <p className="mt-1 text-xs text-foreground-muted">{sub}</p>}
+      {sub && (
+        <p className="mt-1 text-[11px] text-foreground-muted">{sub}</p>
+      )}
     </GlassCard>
   );
 }
 
-function ActivityRow({ conv }: { conv: ConversationSummary }) {
-  const ago = (() => {
-    const ms = Date.now() - new Date(conv.created_at).getTime();
-    const mins = Math.floor(ms / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  })();
+function timeAgo(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
+function ActivityRow({ conv }: { conv: ConversationSummary }) {
   return (
-    <div className="flex items-start gap-3 border-b border-glass-border py-3 last:border-0">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-accent-light"
-        >
+    <Link
+      href="/chat"
+      className="group flex items-start gap-3 border-b border-glass-border py-3 last:border-0 transition-colors hover:bg-white/2"
+    >
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 group-hover:bg-accent/15 transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-light">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {conv.title}
-        </p>
+        <p className="truncate text-xs font-medium text-foreground">{conv.title}</p>
         {conv.last_message && (
-          <p className="mt-0.5 truncate text-xs text-foreground-muted">
+          <p className="mt-0.5 truncate text-[11px] text-foreground-muted leading-relaxed">
             {conv.last_message}
           </p>
         )}
       </div>
       <div className="shrink-0 text-right">
-        <span className="text-[10px] text-foreground-muted">{ago}</span>
-        <p className="text-[10px] text-foreground-muted">
+        <p className="text-[10px] text-foreground-muted">{timeAgo(conv.created_at)}</p>
+        <p className="mt-0.5 text-[10px] text-foreground-muted opacity-60">
           {conv.message_count} msg
         </p>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -109,6 +107,7 @@ export default function DashboardPage() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const refresh = async () => {
     try {
@@ -121,6 +120,7 @@ export default function DashboardPage() {
       setMetrics(m);
       setConversations(c.conversations);
       setError(null);
+      setLastRefresh(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to connect to backend");
     } finally {
@@ -132,135 +132,137 @@ export default function DashboardPage() {
     refresh();
     const id = setInterval(refresh, 15_000);
     return () => clearInterval(id);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const services = health?.services;
+  const isOk = health?.status === "ok";
+
   const keyLabel =
     health?.aws_key_source === "primary_bearer"
-      ? "Primary Bearer"
+      ? "Bearer token"
       : health?.aws_key_source === "backup_absk"
-        ? "Backup ABSK"
-        : "Not configured";
+        ? "ABSK key"
+        : "Not set";
 
   const uptimeLabel = (() => {
     if (!health) return "—";
     const s = health.uptime_seconds;
     if (s < 60) return `${Math.floor(s)}s`;
-    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
     return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
   })();
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
-      {/* Header */}
-      <div className="mb-8 animate-fade-in flex items-end justify-between">
+    <div className="mx-auto max-w-6xl px-6 py-8">
+      {/* ── Header ── */}
+      <div className="mb-8 flex items-start justify-between animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Observability Dashboard
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Observability
           </h1>
-          <p className="mt-1.5 text-sm text-foreground-muted">
-            Real-time service health and LLM metrics — auto-refreshes every 15s
+          <p className="mt-1 text-sm text-foreground-muted">
+            Real-time health and LLM metrics
+            {lastRefresh && (
+              <span className="ml-2 opacity-50">
+                · refreshed {timeAgo(lastRefresh.toISOString())}
+              </span>
+            )}
           </p>
         </div>
+
+        {/* System status pill */}
         <div
-          className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium ${
-            health?.status === "ok"
-              ? "border-success/25 bg-success/5 text-success"
-              : loading
-                ? "border-glass-border bg-glass-bg text-foreground-muted"
-                : "border-error/25 bg-error/5 text-error"
+          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            loading
+              ? "border-glass-border bg-glass-bg text-foreground-muted"
+              : isOk
+                ? "border-success/20 bg-success/8 text-success"
+                : "border-error/20 bg-error/8 text-error"
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
-              health?.status === "ok"
-                ? "bg-success animate-pulse"
-                : loading
-                  ? "bg-foreground-muted"
-                  : "bg-error"
+              loading ? "bg-foreground-muted animate-pulse" : isOk ? "bg-success animate-pulse" : "bg-error"
             }`}
           />
-          {loading ? "Connecting…" : health?.status === "ok" ? "All systems operational" : "Degraded"}
+          {loading ? "Connecting…" : isOk ? "All systems operational" : "Degraded"}
         </div>
       </div>
 
-      {/* Backend error banner */}
+      {/* ── Error banner ── */}
       {error && (
-        <GlassCard className="mb-6 border-error/30 bg-error/5 p-4">
-          <p className="text-sm font-medium text-error">
-            Backend unreachable: {error}
-          </p>
-          <p className="mt-1 text-xs text-foreground-muted">
-            Ensure <code className="rounded bg-white/5 px-1 py-0.5 font-mono">docker-compose up</code> is running
-          </p>
+        <GlassCard className="mb-6 border-error/25 bg-error/5 p-4 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-error">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-error">Backend unreachable</p>
+              <p className="mt-0.5 text-xs text-foreground-muted">{error}</p>
+            </div>
+          </div>
         </GlassCard>
       )}
 
-      {/* Service health row */}
+      {/* ── Service health ── */}
       <section className="mb-6 animate-slide-up">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-          Service Health
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
+          Services
         </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {[
-            { name: "PostgreSQL", status: services?.database },
-            { name: "AWS Bedrock", status: services?.bedrock },
-            { name: "MiniMax TTS", status: services?.minimax },
-            { name: "Datadog Obs", status: health ? "ok" : "unknown" },
-          ].map((svc) => (
-            <GlassCard key={svc.name} className="p-4" hover>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">
-                  {svc.name}
-                </span>
-                <StatusDot
-                  status={loading ? "unknown" : svc.status || "unknown"}
-                />
-              </div>
-              <p className="mt-1.5 text-[11px] capitalize text-foreground-muted">
-                {loading ? "Checking…" : svc.status || "Unknown"}
-              </p>
-            </GlassCard>
-          ))}
+            { name: "PostgreSQL", status: services?.database, icon: "🗄️" },
+            { name: "AWS Bedrock", status: services?.bedrock, icon: "☁️" },
+            { name: "MiniMax TTS", status: services?.minimax, icon: "🎙️" },
+            { name: "Datadog", status: health ? "ok" : "unknown", icon: "📊" },
+          ].map((svc) => {
+            const st = loading ? "unknown" : svc.status ?? "unknown";
+            return (
+              <GlassCard key={svc.name} className="p-3.5" hover>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">{svc.icon}</span>
+                  <StatusDot status={st} />
+                </div>
+                <p className="mt-2 text-xs font-semibold text-foreground">{svc.name}</p>
+                <p className={`mt-0.5 text-[10px] capitalize font-medium ${
+                  st === "ok" ? "text-success" : st === "error" ? "text-error" : "text-foreground-muted"
+                }`}>
+                  {loading ? "Checking…" : st}
+                </p>
+              </GlassCard>
+            );
+          })}
         </div>
       </section>
 
-      {/* Two-column layout: metrics left, activity right */}
+      {/* ── Main grid ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Metrics — takes 2 columns */}
+        {/* Left 2/3 — metrics */}
         <div className="lg:col-span-2 space-y-6">
-          {/* LLM token metrics */}
+          {/* Token usage */}
           <section>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
               LLM Token Usage
             </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MetricCard
-                label="Total Messages"
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <Metric
+                label="Messages"
                 value={metrics?.total_messages ?? "—"}
-                sub="All roles combined"
+                sub="All roles"
               />
-              <MetricCard
+              <Metric
                 label="Input Tokens"
-                value={
-                  metrics
-                    ? metrics.total_input_tokens.toLocaleString()
-                    : "—"
-                }
-                sub="Prompt tokens consumed"
+                value={metrics ? metrics.total_input_tokens.toLocaleString() : "—"}
+                sub="Prompt tokens"
                 accent
               />
-              <MetricCard
+              <Metric
                 label="Output Tokens"
-                value={
-                  metrics
-                    ? metrics.total_output_tokens.toLocaleString()
-                    : "—"
-                }
-                sub="Completion tokens generated"
+                value={metrics ? metrics.total_output_tokens.toLocaleString() : "—"}
+                sub="Completion tokens"
                 accent
               />
-              <MetricCard
+              <Metric
                 label="Conversations"
                 value={metrics?.total_conversations ?? "—"}
                 sub="Unique sessions"
@@ -268,59 +270,41 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* Latency metrics */}
+          {/* Latency */}
           <section>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-              Latency
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
+              Performance
             </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MetricCard
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <Metric
                 label="Avg Latency"
-                value={
-                  metrics?.avg_latency_ms != null
-                    ? `${Math.round(metrics.avg_latency_ms)}ms`
-                    : "—"
-                }
-                sub="Mean response time"
+                value={metrics?.avg_latency_ms != null ? `${Math.round(metrics.avg_latency_ms)}ms` : "—"}
+                sub="Mean response"
               />
-              <MetricCard
+              <Metric
                 label="P95 Latency"
-                value={
-                  metrics?.p95_latency_ms != null
-                    ? `${Math.round(metrics.p95_latency_ms)}ms`
-                    : "—"
-                }
+                value={metrics?.p95_latency_ms != null ? `${Math.round(metrics.p95_latency_ms)}ms` : "—"}
                 sub="95th percentile"
               />
-              <MetricCard
-                label="Uptime"
-                value={uptimeLabel}
-                sub="Backend process uptime"
-              />
-              <MetricCard
-                label="AWS Key"
-                value={health ? keyLabel : "—"}
-                sub={
-                  health?.aws_key_source === "primary_bearer"
-                    ? "Temp bearer (~12h)"
-                    : "Persistent key"
-                }
-              />
+              <Metric label="Uptime" value={uptimeLabel} sub="Process uptime" />
+              <Metric label="AWS Auth" value={health ? keyLabel : "—"} sub={
+                health?.aws_key_source === "primary_bearer" ? "Temp (~12h)" : "Persistent"
+              } />
             </div>
           </section>
 
-          {/* Models used */}
+          {/* Models active */}
           {metrics && metrics.models_used.length > 0 && (
             <section>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-                Models Active
+              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
+                Active Models
               </h2>
               <GlassCard className="p-4">
                 <div className="flex flex-wrap gap-2">
                   {metrics.models_used.map((m) => (
                     <span
                       key={m}
-                      className="rounded-lg bg-accent/10 px-3 py-1 text-xs font-mono font-medium text-accent-light"
+                      className="rounded-lg bg-accent/10 border border-accent/15 px-3 py-1.5 text-[11px] font-mono font-medium text-accent-light"
                     >
                       {m}
                     </span>
@@ -330,135 +314,106 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Datadog LLM Obs link */}
+          {/* Datadog card */}
           <section>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
               Datadog LLM Observability
             </h2>
-            <GlassCard className="p-5">
+            <GlassCard className="p-4">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/10">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-accent-light"
-                  >
-                    <path d="M3 3v18h18" />
-                    <path d="m19 9-5 5-4-4-3 3" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Live traces in Datadog
-                  </p>
-                  <p className="mt-0.5 text-xs text-foreground-muted">
-                    Run backend with{" "}
-                    <code className="rounded bg-white/5 px-1 font-mono text-[11px] text-accent-light">
-                      ddtrace-run
-                    </code>{" "}
-                    to enable auto-instrumented LLM spans
-                  </p>
-                </div>
-                <a
-                  href="https://app.datadoghq.com/llm/traces"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent/15 px-3 py-2 text-xs font-medium text-accent-light transition-colors hover:bg-accent/25"
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: "rgba(99,44,166,0.15)", border: "1px solid rgba(99,44,166,0.25)" }}
                 >
-                  Open
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M7 17l10-10" />
-                    <path d="M7 7h10v10" />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400">
+                    <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
                   </svg>
-                </a>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Live LLM traces</p>
+                  <p className="mt-0.5 text-xs text-foreground-muted">
+                    Every chat request is traced with input/output and latency spans
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <a
+                    href="https://app.datadoghq.com/llm/traces"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs font-medium text-accent-light transition-colors hover:bg-accent/20"
+                  >
+                    LLM Traces
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 17l10-10" /><path d="M7 7h10v10" /></svg>
+                  </a>
+                  <a
+                    href="https://app.datadoghq.com/dashboard/lists"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-white/4 px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
+                  >
+                    Dashboards
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 17l10-10" /><path d="M7 7h10v10" /></svg>
+                  </a>
+                </div>
               </div>
             </GlassCard>
           </section>
         </div>
 
-        {/* Activity log — right column */}
+        {/* Right 1/3 — recent activity */}
         <div className="lg:col-span-1">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-            Recent Activity
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">
+              Recent Sessions
+            </h2>
+            <Link
+              href="/chat"
+              className="text-[11px] font-medium text-accent-light hover:underline"
+            >
+              New chat →
+            </Link>
+          </div>
+
           <GlassCard className="p-4">
             {loading ? (
-              <div className="space-y-3 py-2">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="h-7 w-7 rounded-lg bg-white/5" />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-3/4 rounded bg-white/5" />
-                      <div className="h-2.5 w-1/2 rounded bg-white/5" />
+              <div className="space-y-3 py-1">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex gap-3 animate-pulse">
+                    <div className="h-7 w-7 rounded-lg bg-white/5 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-2.5 w-3/4 rounded-sm bg-white/5" />
+                      <div className="h-2 w-1/2 rounded-sm bg-white/5" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mb-3 text-foreground-muted opacity-40"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                <p className="text-xs text-foreground-muted">
-                  No conversations yet.
-                </p>
-                <a
-                  href="/chat"
-                  className="mt-3 text-xs font-medium text-accent-light hover:underline"
-                >
-                  Start chatting →
-                </a>
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/4">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-foreground-muted opacity-50">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <p className="text-xs font-medium text-foreground-muted">No sessions yet</p>
+                <Link href="/chat" className="mt-3 text-xs font-semibold text-accent-light hover:underline">
+                  Start your first conversation →
+                </Link>
               </div>
             ) : (
-              <div>
+              <>
                 {conversations.map((c) => (
                   <ActivityRow key={c.id} conv={c} />
                 ))}
-                <a
+                <Link
                   href="/chat"
-                  className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-white/4 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
+                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-white/4 py-2 text-xs font-medium text-foreground-muted transition-colors hover:bg-white/7 hover:text-foreground"
                 >
-                  Open Chat
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M5 12h14" />
-                    <path d="m12 5 7 7-7 7" />
+                  View all in Chat
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
                   </svg>
-                </a>
-              </div>
+                </Link>
+              </>
             )}
           </GlassCard>
         </div>
