@@ -518,6 +518,7 @@ export default function ChatPage() {
   const [voices, setVoices] = useState<DebateVoice[]>([]);
   const [voiceA, setVoiceA] = useState("English_expressive_narrator");
   const [voiceB, setVoiceB] = useState("Deep_Voice_Man");
+  const [style, setStyle] = useState("standard");
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const stoppedRef = useRef(false);
 
@@ -637,7 +638,7 @@ export default function ChatPage() {
     if (!t) return;
     setDebatePhase("setup"); setError(null);
     try {
-      const sess = await startDebate(t, numTurns, voiceA, voiceB);
+      const sess = await startDebate(t, numTurns, style, voiceA, voiceB);
       setDebateSession(sess); setInputValue(""); setDebateTurns([]); setCurrentTurn(0);
       runDebate(sess);
     } catch (e) {
@@ -722,7 +723,7 @@ export default function ChatPage() {
                     </button>
                   </div>
 
-                  {/* Controls row: turns + voice toggle */}
+                  {/* Controls row: turns + style + voice toggle */}
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] font-medium" style={{ color: "var(--foreground-muted)" }}>Turns</span>
@@ -734,16 +735,39 @@ export default function ChatPage() {
                           </button>
                         ))}
                       </div>
-                      <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>{numTurns / 2} exchanges</span>
                     </div>
-                    <button onClick={() => setShowVoicePicker((x) => !x)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all"
-                      style={{ background: showVoicePicker ? "color-mix(in srgb, var(--warning) 12%, transparent)" : "var(--surface-raised)", color: showVoicePicker ? "var(--warning)" : "var(--foreground-muted)", border: `1px solid ${showVoicePicker ? "color-mix(in srgb, var(--warning) 30%, transparent)" : "var(--border)"}` }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" />
-                      </svg>
-                      Voices
-                      {showVoicePicker ? " ▲" : " ▼"}
-                    </button>
+                    
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1.5 rounded-lg p-1" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
+                        {[
+                          { id: "standard", label: "Standard", icon: "💬" },
+                          { id: "rap_battle", label: "Rap", icon: "🎤" },
+                          { id: "blame_game", label: "Blame", icon: "👉" },
+                          { id: "roast", label: "Roast", icon: "🔥" },
+                        ].map((s) => (
+                          <button key={s.id} onClick={() => setStyle(s.id)} 
+                            className="rounded-md px-2 py-1 text-[10px] font-medium transition-all flex items-center gap-1"
+                            style={{ 
+                              background: style === s.id ? "var(--warning)" : "transparent", 
+                              color: style === s.id ? "#fff" : "var(--foreground-muted)" 
+                            }}
+                            title={s.label}
+                          >
+                            <span>{s.icon}</span>
+                            <span className="hidden sm:inline">{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <button onClick={() => setShowVoicePicker((x) => !x)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all"
+                        style={{ background: showVoicePicker ? "color-mix(in srgb, var(--warning) 12%, transparent)" : "var(--surface-raised)", color: showVoicePicker ? "var(--warning)" : "var(--foreground-muted)", border: `1px solid ${showVoicePicker ? "color-mix(in srgb, var(--warning) 30%, transparent)" : "var(--border)"}` }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" />
+                        </svg>
+                        Voices
+                        {showVoicePicker ? " ▲" : " ▼"}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Voice pickers (collapsible) */}

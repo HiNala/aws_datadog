@@ -1,3 +1,23 @@
+"""
+AWS Bedrock inference service.
+
+Auth priority:
+  1. Hackathon bearer token (account 283845804869, WSParticipantRole)
+     → Uses inference profile: global.anthropic.claude-sonnet-4-20250514-v1:0
+     STATUS: WSParticipantRole currently lacks bedrock:InvokeModel / bedrock:CallWithBearerToken.
+             Kept first so it auto-activates if the organisers grant the permission.
+
+  2. Hackathon boto3 / IAM session (same account, same WSParticipantRole)
+     → Same inference profile ARN via converse/invoke
+     STATUS: Same IAM block — same account, same role.
+
+  3. Personal ABSK key (account 655366068864, BedrockAPIKey-vuui-at-655366068864)
+     → us.anthropic.claude-sonnet-4-6  (CONFIRMED WORKING ✅)
+     STATUS: Expires March 21 2026.  CURRENTLY THE ONLY WORKING PATH.
+
+All three paths are logged so you can see exactly which one fires in the container logs.
+"""
+
 import json
 import logging
 from typing import Any
@@ -8,17 +28,19 @@ from app.config import Settings
 
 logger = logging.getLogger("opsvoice.bedrock")
 
-# ── Confirmed-working model IDs ────────────────────────────────────────────────
-# ABSK (personal account 655366068864) — CONFIRMED PASS via live test:
-#   us.anthropic.claude-sonnet-4-6    @us-east-1  → 1152ms ✅
-#   us.anthropic.claude-3-5-haiku-20241022-v1:0  → fallback ✅
-# Event bearer (account 283845804869 / WSParticipantRole):
-#   ALL FAIL — WSParticipantRole lacks bedrock:InvokeModel (ask AWS booth)
+# ── Model / profile IDs ───────────────────────────────────────────────────────
 
-MODEL_SONNET_46     = "us.anthropic.claude-sonnet-4-6"          # CONFIRMED PASS
-MODEL_HAIKU_35      = "us.anthropic.claude-3-5-haiku-20241022-v1:0"  # confirmed pass
-MODEL_HAIKU_3       = "anthropic.claude-3-haiku-20240307-v1:0"       # confirmed pass
-MODEL_SONNET_4_OLD  = "us.anthropic.claude-sonnet-4-20250514-v1:0"   # event-account target
+# Hackathon account (283845804869) — Global inference profile
+HACKATHON_PROFILE_ARN = (
+    "arn:aws:bedrock:us-west-2:283845804869"
+    ":inference-profile/global.anthropic.claude-sonnet-4-20250514-v1:0"
+)
+HACKATHON_PROFILE_ID  = "global.anthropic.claude-sonnet-4-20250514-v1:0"
+
+# Personal account (655366068864) — direct cross-region model IDs
+MODEL_SONNET_46    = "us.anthropic.claude-sonnet-4-6"          # CONFIRMED ✅
+MODEL_HAIKU_35     = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+MODEL_HAIKU_3      = "anthropic.claude-3-haiku-20240307-v1:0"
 
 MAX_TOKENS = 2048
 
@@ -29,22 +51,19 @@ SYSTEM_PROMPT = (
     "Use plain language, short sentences. Speak like a senior SRE briefing their team."
 )
 
-# ── ABSK chain (personal account 655366068864) ─────────────────────────────────
-# Lead with confirmed-working Sonnet 4.6 cross-region.
+# ── ABSK personal fallback chain (CURRENTLY THE ONLY WORKING PATH) ───────────
 ABSK_FALLBACK_CHAIN = [
-    ("us-west-2", MODEL_SONNET_46),   # CONFIRMED PASS 1180ms ✅
-    ("us-east-1", MODEL_SONNET_46),   # also works (propagation varies)
-    ("us-west-2", MODEL_HAIKU_35),    # fallback
-    ("us-east-1", MODEL_HAIKU_35),    # fallback
-    ("us-east-1", MODEL_HAIKU_3),     # last resort
+    ("us-west-2", MODEL_SONNET_46),   # CONFIRMED PASS ✅
+    ("us-east-1", MODEL_SONNET_46),
+    ("us-west-2", MODEL_HAIKU_35),
+    ("us-east-1", MODEL_HAIKU_35),
+    ("us-east-1", MODEL_HAIKU_3),
 ]
 
-# ── Event bearer token chain (account 283845804869 / WSParticipantRole) ────────
-# Currently BLOCKED — role lacks bedrock:InvokeModel.
-# us-west-2: 403 "not authorized"; us-east-1: 403 "auth failed" (wrong region).
+# ── Bearer chain — hackathon (blocked until WSParticipantRole gets permission) ─
 BEARER_FALLBACK_CHAIN = [
-    ("us-west-2", MODEL_SONNET_46),
-    ("us-west-2", MODEL_SONNET_4_OLD),
+    ("us-west-2", HACKATHON_PROFILE_ID),
+    ("us-west-2", "us.anthropic.claude-sonnet-4-20250514-v1:0"),
     ("us-west-2", MODEL_HAIKU_35),
 ]
 
@@ -55,14 +74,8 @@ def _bedrock_url(region: str, model_id: str) -> str:
 
 class BedrockService:
     """
-    Calls Claude on AWS Bedrock.
-
-    Auth priority (ABSK first — it's the only one currently working):
-      1. ABSK key   (personal account 655366068864 — CONFIRMED working)
-      2. Bearer token  (event account 283845804869 — WSParticipantRole blocked)
-      3. boto3 SigV4   (same event account — same IAM block)
-
-    Key source logged at every invocation so you can see which one fired.
+    Calls Claude on AWS Bedrock with a three-level auth fallback.
+    Logs which credential set succeeded so you can monitor switching in real-time.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -74,136 +87,111 @@ class BedrockService:
         self._region        = settings.aws_default_region
 
         logger.info("BedrockService credentials:")
-        logger.info("  ABSK (personal):     %s", "PRESENT" if self._absk_key else "MISSING")
-        logger.info("  Bearer (event):      %s", "PRESENT" if self._bearer_token else "MISSING")
-        logger.info("  IAM session (boto3): %s", "PRESENT" if self._access_key else "MISSING")
+        logger.info(
+            "  [1] Bearer token (hackathon, WSParticipantRole, acct 283845804869): %s",
+            "PRESENT ⚠ (blocked — WSParticipantRole lacks bedrock:InvokeModel)" if self._bearer_token else "MISSING",
+        )
+        logger.info(
+            "  [2] IAM session  (hackathon boto3, same acct):  %s",
+            "PRESENT ⚠ (same IAM block)" if self._access_key else "MISSING",
+        )
+        logger.info(
+            "  [3] ABSK         (personal, acct 655366068864, expires Mar 21 2026): %s",
+            "PRESENT ✅ (CURRENTLY WORKING)" if self._absk_key else "MISSING ❌",
+        )
+
+    # ── Public entry point ────────────────────────────────────────────────────
 
     def invoke(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
-        """Try auth methods in order; log which key fires.
-        
+        """
+        Try auth methods in priority order; log clearly which one fires.
         Args:
-            messages: List of user/assistant messages (no system role).
-            system: Optional system prompt override. Falls back to SYSTEM_PROMPT.
+            messages: User/assistant messages (no system role entries).
+            system:   Optional system prompt override. Defaults to SYSTEM_PROMPT.
         """
         errors: list[str] = []
 
-        # 1. ABSK — personal account, currently working
-        if self._absk_key:
-            logger.info("[KEY] Trying ABSK (personal, account 655366068864) …")
-            try:
-                result = self._invoke_absk_chain(messages, system=system)
-                logger.info("[KEY] SUCCESS via ABSK — model: %s", result.get("model", "?"))
-                return result
-            except RuntimeError as e:
-                logger.warning("[KEY] ABSK failed: %s", str(e)[:100])
-                errors.append(f"absk: {e}")
-
-        # 2. Bearer token — event account (currently blocked by IAM)
+        # 1. Hackathon bearer token (primary preference per event organisers)
         if self._bearer_token:
-            logger.info("[KEY] Trying event bearer token (account 283845804869) …")
+            logger.info("[KEY-1] Trying hackathon bearer token (acct 283845804869, WSParticipantRole)…")
             try:
                 result = self._invoke_bearer_chain(messages, system=system)
-                logger.info("[KEY] SUCCESS via event bearer token")
+                logger.info("[KEY-1] ✅ SUCCESS via hackathon bearer token — model: %s", result.get("model", "?"))
                 return result
             except RuntimeError as e:
-                logger.warning("[KEY] Bearer failed: %s", str(e)[:100])
+                logger.warning("[KEY-1] ❌ Bearer failed: %s", str(e)[:120])
                 errors.append(f"bearer: {e}")
 
-        # 3. boto3 SigV4 — same event account, same IAM block
+        # 2. Hackathon IAM session / boto3 (same account, same WSParticipantRole)
         if self._access_key and self._secret_key:
-            logger.info("[KEY] Trying IAM boto3 (account 283845804869) …")
+            logger.info("[KEY-2] Trying hackathon IAM session (boto3, acct 283845804869)…")
             try:
-                result = self._invoke_boto3(messages, system=system)
-                logger.info("[KEY] SUCCESS via IAM boto3")
+                result = self._invoke_boto3_hackathon(messages, system=system)
+                logger.info("[KEY-2] ✅ SUCCESS via hackathon IAM session — model: %s", result.get("model", "?"))
                 return result
             except Exception as e:
-                logger.warning("[KEY] boto3 failed: %s", str(e)[:100])
-                errors.append(f"boto3: {e}")
+                logger.warning("[KEY-2] ❌ boto3 hackathon failed: %s", str(e)[:120])
+                errors.append(f"boto3_event: {e}")
+
+        # 3. Personal ABSK (account 655366068864) — currently the only working path
+        if self._absk_key:
+            logger.info("[KEY-3] Trying personal ABSK (acct 655366068864, expires Mar 21 2026)…")
+            try:
+                result = self._invoke_absk_chain(messages, system=system)
+                logger.info("[KEY-3] ✅ SUCCESS via personal ABSK — model: %s", result.get("model", "?"))
+                return result
+            except RuntimeError as e:
+                logger.warning("[KEY-3] ❌ ABSK failed: %s", str(e)[:120])
+                errors.append(f"absk: {e}")
 
         raise RuntimeError(
             f"All Bedrock methods failed. "
-            f"ABSK: enable model access at bedrock console for account 655366068864. "
-            f"Event: WSParticipantRole needs bedrock:InvokeModel (ask AWS booth). "
-            f"Details: {'; '.join(errors[:2])}"
+            f"Hackathon: WSParticipantRole needs bedrock:InvokeModel (ask AWS booth). "
+            f"Personal ABSK: ensure model access is enabled for account 655366068864. "
+            f"Details: {'; '.join(errors[:3])}"
         )
 
-    # ── ABSK chain ─────────────────────────────────────────────────────────────
-
-    def _invoke_absk_chain(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
-        """
-        Use ABSK_FALLBACK_CHAIN.
-        NOTE: 'use case details' errors may be region-specific due to cross-region inference
-        propagation delays — keep trying all combos, don't fast-fail on that error.
-        CONFIRMED PASS: us-west-2 + us.anthropic.claude-sonnet-4-6 (1180ms)
-        """
-        last_err: Exception = RuntimeError("empty ABSK chain")
-        for region, model_id in ABSK_FALLBACK_CHAIN:
-            try:
-                result = self._http_invoke(
-                    token=self._absk_key,
-                    region=region,
-                    model_id=model_id,
-                    label=f"absk/{region}",
-                    messages=messages,
-                    system=system,
-                )
-                logger.info("[KEY] ABSK ok: %s @%s", model_id.split(".")[-1][:35], region)
-                return result
-            except RuntimeError as e:
-                err_str = str(e)
-                logger.debug("ABSK %s/%s: %s", region, model_id[:35], err_str[:60])
-                last_err = e
-                # Only fast-fail on hard auth rejection (not use-case/propagation issues)
-                if "authentication failed" in err_str.lower() and "bedrock-api-key" not in err_str.lower():
-                    logger.info("[KEY] ABSK fast-fail: token rejected outright")
-                    break
-        raise last_err
-
-    # ── Bearer token chain ─────────────────────────────────────────────────────
+    # ── Hackathon bearer chain ────────────────────────────────────────────────
 
     def _invoke_bearer_chain(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
+        """Bearer token against hackathon inference profile (us-west-2)."""
         last_err: Exception = RuntimeError("empty bearer chain")
-        seen_blocked: set[str] = set()
         for region, model_id in BEARER_FALLBACK_CHAIN:
-            if region in seen_blocked:
-                continue
             try:
                 return self._http_invoke(
                     token=self._bearer_token,
                     region=region,
                     model_id=model_id,
-                    label=f"bearer/{region}",
+                    label=f"bearer_hackathon/{region}",
                     messages=messages,
                     system=system,
                 )
             except RuntimeError as e:
                 err_str = str(e)
                 last_err = e
-                if "WSParticipantRole" in err_str and "not authorized" in err_str:
-                    logger.debug("[KEY] Bearer: WSParticipantRole blocked in %s", region)
-                    seen_blocked.add(region)
-                elif "Authentication failed" in err_str:
-                    logger.info("[KEY] Bearer fast-fail: token rejected (wrong region / expired)")
+                # WSParticipantRole IAM block is account-wide — no point trying other models
+                if "not authorized" in err_str.lower() and "WSParticipantRole" in err_str:
+                    logger.debug("[KEY-1] WSParticipantRole blocked, skipping remaining bearer attempts")
                     break
-        if "WSParticipantRole" in str(last_err):
-            logger.info(
-                "[KEY] Bearer exhausted: WSParticipantRole lacks bedrock:InvokeModel — "
-                "ask AWS booth to grant permission in account 283845804869"
-            )
+                if "403" in err_str and ("AccessDenied" in err_str or "Forbidden" in err_str):
+                    logger.debug("[KEY-1] Bearer 403 — token rejected or IAM block")
+                    break
         raise last_err
 
-    # ── boto3 SigV4 ────────────────────────────────────────────────────────────
+    # ── Hackathon boto3 / IAM ─────────────────────────────────────────────────
 
-    def _invoke_boto3(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
+    def _invoke_boto3_hackathon(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
+        """boto3 against hackathon inference profile ARN using IAM session credentials."""
         import boto3
         body = self._build_body(messages, system=system)
-        chain = [
-            ("us-west-2", MODEL_SONNET_46),
-            ("us-east-1", MODEL_SONNET_46),
-            ("us-west-2", MODEL_SONNET_4_OLD),
+        # Try inference profile ARN first, then converse API, then regular model IDs
+        attempts = [
+            ("us-west-2", HACKATHON_PROFILE_ARN),
+            ("us-west-2", HACKATHON_PROFILE_ID),
+            ("us-west-2", "us.anthropic.claude-sonnet-4-20250514-v1:0"),
         ]
-        last_err: Exception = RuntimeError("boto3: empty chain")
-        for region, model_id in chain:
+        last_err: Exception = RuntimeError("boto3 hackathon: empty chain")
+        for region, model_id in attempts:
             try:
                 client = boto3.client(
                     "bedrock-runtime", region_name=region,
@@ -211,7 +199,7 @@ class BedrockService:
                     aws_secret_access_key=self._secret_key,
                     aws_session_token=self._session_token or None,
                 )
-                logger.info("Bedrock [boto3/%s]: invoking %s", region, model_id)
+                logger.info("[KEY-2] boto3 hackathon: invoking %s @%s", model_id[:60], region)
                 response = client.invoke_model(
                     modelId=model_id, body=json.dumps(body),
                     contentType="application/json", accept="application/json",
@@ -221,13 +209,40 @@ class BedrockService:
             except Exception as e:
                 err_str = str(e)
                 last_err = e
-                logger.debug("boto3 attempt failed (%s/%s): %s", region, model_id, err_str[:100])
-                if "AccessDenied" in err_str or "not authorized" in err_str.lower():
-                    # Same IAM block will apply to all regions/models
-                    raise RuntimeError(f"boto3 Bedrock error: {err_str[:200]}") from e
+                logger.debug("[KEY-2] boto3 attempt failed (%s): %s", model_id[:40], err_str[:100])
+                # IAM block applies to all regions/models for this role — fast fail
+                if "not authorized" in err_str.lower() or "AccessDenied" in err_str:
+                    raise RuntimeError(f"boto3 hackathon IAM block: {err_str[:200]}") from e
         raise last_err
 
-    # ── Shared helpers ─────────────────────────────────────────────────────────
+    # ── Personal ABSK chain ───────────────────────────────────────────────────
+
+    def _invoke_absk_chain(self, messages: list[dict[str, str]], system: str | None = None) -> dict[str, Any]:
+        """ABSK fallback chain against personal account 655366068864 (CONFIRMED WORKING)."""
+        last_err: Exception = RuntimeError("empty ABSK chain")
+        for region, model_id in ABSK_FALLBACK_CHAIN:
+            try:
+                result = self._http_invoke(
+                    token=self._absk_key,
+                    region=region,
+                    model_id=model_id,
+                    label=f"absk_personal/{region}",
+                    messages=messages,
+                    system=system,
+                )
+                logger.info("[KEY-3] ABSK ok: %s @%s", model_id.split(".")[-1][:35], region)
+                return result
+            except RuntimeError as e:
+                err_str = str(e)
+                logger.debug("ABSK %s/%s: %s", region, model_id[:35], err_str[:60])
+                last_err = e
+                # Only fast-fail on hard token rejection (not use-case/propagation)
+                if "authentication failed" in err_str.lower() and "bedrock-api-key" not in err_str.lower():
+                    logger.info("[KEY-3] ABSK token rejected outright, stopping")
+                    break
+        raise last_err
+
+    # ── Shared helpers ────────────────────────────────────────────────────────
 
     def _http_invoke(
         self,
@@ -242,11 +257,11 @@ class BedrockService:
         url = _bedrock_url(region, model_id)
         body = self._build_body(messages, system=system)
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
-        logger.info("Bedrock [%s]: %s", label, model_id)
+        logger.info("Bedrock [%s]: %s", label, model_id[:60])
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(url, json=body, headers=headers)
         if resp.status_code != 200:
-            raise RuntimeError(f"{resp.status_code} [{label}]: {resp.text[:180]}")
+            raise RuntimeError(f"{resp.status_code} [{label}]: {resp.text[:200]}")
         return self._parse_response(resp.json())
 
     def _build_body(self, messages: list[dict], system: str | None = None) -> dict:

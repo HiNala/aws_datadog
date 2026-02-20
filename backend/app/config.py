@@ -36,22 +36,36 @@ class Settings(BaseSettings):
 
     @property
     def aws_key_source(self) -> str:
+        """Returns the highest-priority key currently configured (not necessarily working)."""
         if self.aws_bearer_token_bedrock:
-            return "primary_bearer"
+            return "hackathon_bearer_primary"
         if self.aws_access_key_id and self.aws_secret_access_key:
-            return "iam_session"
+            return "hackathon_iam_session"
         if self.aws_bedrock_api_key_backup:
-            return "backup_absk"
+            return "personal_absk_fallback"
         return "none"
 
     def log_key_status(self) -> None:
+        n = 0
         if self.aws_bearer_token_bedrock:
-            logger.info("AWS Auth: PRIMARY hackathon bearer token (expires ~12h)")
-        elif self.aws_access_key_id:
-            logger.info("AWS Auth: IAM session credentials (boto3 SigV4)")
-        elif self.aws_bedrock_api_key_backup:
-            logger.warning("AWS Auth: BACKUP ABSK API key")
-        else:
+            n += 1
+            logger.info(
+                "AWS Auth [1]: Hackathon bearer token PRESENT "
+                "(acct 283845804869 / WSParticipantRole — BLOCKED until IAM permission granted)"
+            )
+        if self.aws_access_key_id and self.aws_secret_access_key:
+            n += 1
+            logger.info(
+                "AWS Auth [2]: Hackathon IAM session PRESENT "
+                "(boto3 SigV4 — same WSParticipantRole block)"
+            )
+        if self.aws_bedrock_api_key_backup:
+            n += 1
+            logger.info(
+                "AWS Auth [3]: Personal ABSK PRESENT "
+                "(acct 655366068864 / BedrockAPIKey-vuui — CONFIRMED WORKING ✅, expires Mar 21 2026)"
+            )
+        if n == 0:
             logger.error("AWS Auth: NO credentials configured!")
 
         if self.minimax_api_key:
