@@ -409,64 +409,153 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Datadog LLM Obs link */}
+          {/* ── Datadog Observability Panel ── */}
           <section>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
-              Datadog LLM Observability
-            </h2>
-            <GlassCard className="p-5">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/10">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-accent-light"
-                  >
-                    <path d="M3 3v18h18" />
-                    <path d="m19 9-5 5-4-4-3 3" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Live traces in Datadog
-                  </p>
-                  <p className="mt-0.5 text-xs text-foreground-muted">
-                    Run backend with{" "}
-                    <code className="rounded px-1 font-mono text-[11px] text-accent-light" style={{ background: "var(--surface-overlay)" }}>
-                      ddtrace-run
-                    </code>{" "}
-                    to enable auto-instrumented LLM spans
-                  </p>
-                </div>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>
+                Datadog Observability
+              </h2>
+              <span
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                style={{
+                  background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                  color: "var(--accent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                }}
+              >
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                  <circle cx="4" cy="4" r="4" />
+                </svg>
+                ddtrace-run active
+              </span>
+            </div>
+
+            {/* Deep-link cards — 2 col grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                {
+                  label: "LLM Traces",
+                  desc: "Every Claude invocation with token counts and latency",
+                  href: "https://app.datadoghq.com/llm/traces",
+                  icon: (
+                    <path d="M3 3v18h18M19 9l-5 5-4-4-3 3" strokeLinecap="round" strokeLinejoin="round" />
+                  ),
+                },
+                {
+                  label: "APM Service Map",
+                  desc: "End-to-end distributed traces for opsvoice-backend",
+                  href: "https://app.datadoghq.com/apm/services",
+                  icon: (
+                    <>
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="5" cy="19" r="2" />
+                      <circle cx="19" cy="19" r="2" />
+                      <path d="m12 7-7 10M12 7l7 10" />
+                    </>
+                  ),
+                },
+                {
+                  label: "LLM Evaluations",
+                  desc: "AI-powered quality scoring (hallucination, relevancy)",
+                  href: "https://app.datadoghq.com/llm/evaluations",
+                  icon: (
+                    <>
+                      <path d="M9 11l3 3L22 4" />
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                    </>
+                  ),
+                },
+                {
+                  label: "Error Tracking",
+                  desc: "Aggregated backend errors and stack traces",
+                  href: "https://app.datadoghq.com/error-tracking",
+                  icon: (
+                    <>
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </>
+                  ),
+                },
+              ].map((item) => (
                 <a
-                  href="https://app.datadoghq.com/llm/traces"
+                  key={item.label}
+                  href={item.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent/15 px-3 py-2 text-xs font-medium text-accent-light transition-colors hover:bg-accent/25"
+                  className="group block rounded-xl p-4 transition-all duration-150"
+                  style={{
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--accent) 30%, transparent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+                  }}
                 >
-                  Open
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M7 17l10-10" />
-                    <path d="M7 7h10v10" />
-                  </svg>
+                  <div className="mb-2.5 flex items-center justify-between">
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-lg"
+                      style={{ background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+                        {item.icon}
+                      </svg>
+                    </div>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-muted)" }}>
+                      <path d="M7 17l10-10M7 7h10v10" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                    {item.label}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug" style={{ color: "var(--foreground-muted)" }}>
+                    {item.desc}
+                  </p>
                 </a>
+              ))}
+            </div>
+
+            {/* Setup banner — shown if DD not yet wired */}
+            <div
+              className="mt-3 flex items-start gap-3 rounded-xl p-4"
+              style={{
+                background: "color-mix(in srgb, var(--warning) 6%, var(--surface-raised))",
+                border: "1px solid color-mix(in srgb, var(--warning) 20%, transparent)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0" style={{ color: "var(--warning)" }}>
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>
+                  DD_API_KEY not configured — add your key to enable live traces
+                </p>
+                <p className="mt-0.5 text-[11px]" style={{ color: "var(--foreground-muted)" }}>
+                  1. Get keys at{" "}
+                  <a href="https://app.datadoghq.com/organization-settings/api-keys" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--accent)" }}>
+                    datadoghq.com/org-settings
+                  </a>
+                  {" "}→ 2. Add to{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>.env</code>
+                  {" "}→ 3. Run{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>
+                    docker compose up --build -d
+                  </code>
+                  {" "}→ 4.{" "}
+                  <code className="rounded px-1" style={{ background: "var(--surface-overlay)", fontFamily: "monospace" }}>
+                    python scripts/create_dd_dashboard.py
+                  </code>
+                </p>
               </div>
-            </GlassCard>
+            </div>
           </section>
         </div>
 
