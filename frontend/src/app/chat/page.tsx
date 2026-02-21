@@ -13,6 +13,7 @@ import {
   streamDebateTurn,
   listDebateSessions,
   getDebateVoices,
+  deleteConversation,
   type ChatResponse,
   type ConversationSummary,
   type DebateSessionResponse,
@@ -177,13 +178,36 @@ function VoicePicker({
   label: string;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const selected = voices.find((v) => v.id === value);
 
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: accentColor }}>{label}</p>
       <button
         type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         onClick={() => setOpen((x) => !x)}
         className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition-all"
         style={{ background: "var(--surface-raised)", border: `1px solid ${open ? accentColor : "var(--border)"}`, color: "var(--foreground)" }}
@@ -200,19 +224,27 @@ function VoicePicker({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1.5 w-full rounded-xl overflow-hidden py-1"
-          style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.14)" }}>
+        <div
+          role="listbox"
+          aria-label={label}
+          className="absolute z-50 mt-1.5 w-full rounded-xl overflow-hidden py-1"
+          style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.14)" }}
+        >
           <div className="max-h-52 overflow-y-auto">
             {voices.map((v) => (
               <button
                 key={v.id}
                 type="button"
+                role="option"
+                aria-selected={v.id === value}
                 onClick={() => { onChange(v.id); setOpen(false); }}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-all"
                 style={{
                   background: v.id === value ? `color-mix(in srgb, ${accentColor} 10%, transparent)` : "transparent",
                   color: v.id === value ? accentColor : "var(--foreground)",
                 }}
+                onMouseEnter={(e) => { if (v.id !== value) (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
+                onMouseLeave={(e) => { if (v.id !== value) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               >
                 <span className="w-4 text-center text-[11px]" style={{ color: v.id === value ? accentColor : "var(--foreground-muted)" }}>
                   {GENDER_EMOJI[v.gender]}
@@ -235,16 +267,37 @@ function VoicePicker({
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-function Sidebar({ conversations, debates, activeConvId, onSelectConv, onNew, mode, onSetMode }: {
+function Sidebar({ conversations, debates, activeConvId, onSelectConv, onNew, mode, onSetMode, onDeleteConv }: {
   conversations: ConversationSummary[]; debates: DebateHistoryItem[]; activeConvId: string | null;
   onSelectConv: (id: string) => void; onNew: () => void; mode: Mode; onSetMode: (m: Mode) => void;
+  onDeleteConv: (id: string) => void;
 }) {
+  const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setDeletingId(id);
+    try {
+      await deleteConversation(id);
+      onDeleteConv(id);
+    } catch { /* ok — show nothing */ } finally {
+      setDeletingId(null);
+    }
+  }, [onDeleteConv]);
+
   return (
     <aside className="flex w-56 shrink-0 flex-col" style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}>
       <div className="p-2.5">
-        <button onClick={onNew} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all"
-          style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+        <button
+          onClick={onNew}
+          aria-label="New chat or debate"
+          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all"
+          style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)"; (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
           New
         </button>
       </div>
@@ -252,28 +305,70 @@ function Sidebar({ conversations, debates, activeConvId, onSelectConv, onNew, mo
         <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>Chats</p>
         {conversations.length === 0
           ? <p className="px-3 py-3 text-center text-[10px]" style={{ color: "var(--foreground-muted)" }}>No chats yet</p>
-          : <div className="space-y-0.5">{conversations.map((c) => {
-              const active = mode === "chat" && activeConvId === c.id;
-              return (
-                <button key={c.id} onClick={() => { onSetMode("chat"); onSelectConv(c.id); }}
-                  className="w-full rounded-lg px-3 py-2 text-left transition-all"
-                  style={{ background: active ? "var(--surface-active)" : "transparent", color: active ? "var(--foreground)" : "var(--foreground-muted)" }}>
-                  <p className="truncate text-[11px] font-medium">{c.title}</p>
-                  <p className="mt-0.5 text-[9px] opacity-50">{c.message_count} msg</p>
-                </button>
-              );
-            })}</div>
+          : (
+            <div className="space-y-0.5">
+              {conversations.map((c) => {
+                const active = mode === "chat" && activeConvId === c.id;
+                const hovered = hoveredConvId === c.id;
+                return (
+                  <div
+                    key={c.id}
+                    className="group relative flex items-center rounded-lg transition-all"
+                    style={{ background: active ? "var(--surface-active)" : hovered ? "var(--surface-hover)" : "transparent" }}
+                    onMouseEnter={() => setHoveredConvId(c.id)}
+                    onMouseLeave={() => setHoveredConvId(null)}
+                  >
+                    <button
+                      onClick={() => { onSetMode("chat"); onSelectConv(c.id); }}
+                      className="flex-1 min-w-0 px-3 py-2 text-left"
+                      title={c.title}
+                    >
+                      <p className="truncate text-[11px] font-medium" style={{ color: active ? "var(--foreground)" : "var(--foreground-muted)" }}>{c.title}</p>
+                      <p className="mt-0.5 text-[9px]" style={{ color: "var(--foreground-muted)", opacity: 0.5 }}>{c.message_count} msg</p>
+                    </button>
+                    {(hovered || deletingId === c.id) && (
+                      <button
+                        onClick={(e) => handleDelete(e, c.id)}
+                        aria-label={`Delete conversation: ${c.title}`}
+                        title="Delete conversation"
+                        disabled={deletingId === c.id}
+                        className="mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors"
+                        style={{ color: "var(--foreground-muted)" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--error)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+                      >
+                        {deletingId === c.id
+                          ? <svg className="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                          : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        }
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )
         }
         <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--warning)" }}>Debates</p>
         {debates.length === 0
           ? <p className="px-3 py-3 text-center text-[10px]" style={{ color: "var(--foreground-muted)" }}>No debates yet</p>
-          : <div className="space-y-0.5">{debates.map((d) => (
-              <button key={d.session_id} onClick={() => onSetMode("debate")}
-                className="w-full rounded-lg px-3 py-2 text-left transition-all" style={{ color: "var(--foreground-muted)" }}>
-                <p className="truncate text-[11px] font-medium">{d.topic}</p>
-                <p className="mt-0.5 text-[9px] opacity-50">{d.agent_a_name} vs {d.agent_b_name}</p>
-              </button>
-            ))}</div>
+          : (
+            <div className="space-y-0.5">
+              {debates.map((d) => (
+                <button
+                  key={d.session_id}
+                  onClick={() => onSetMode("debate")}
+                  className="w-full rounded-lg px-3 py-2 text-left transition-all"
+                  style={{ color: "var(--foreground-muted)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+                >
+                  <p className="truncate text-[11px] font-medium">{d.topic}</p>
+                  <p className="mt-0.5 text-[9px]" style={{ opacity: 0.5 }}>{d.agent_a_name} vs {d.agent_b_name}</p>
+                </button>
+              ))}
+            </div>
+          )
         }
       </div>
     </aside>
@@ -332,23 +427,45 @@ function UnifiedInput({ value, onChange, onSend, onVoiceTranscript, isLoading, v
       )}
       <div className="relative rounded-2xl transition-all duration-200"
         style={{ background: "var(--surface-raised)", border: `1px solid ${isRecording ? "var(--accent)" : "var(--border)"}`, boxShadow: isRecording ? "0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent)" : "0 1px 3px rgba(0,0,0,0.04)" }}>
-        <textarea ref={textareaRef} value={isRecording ? "" : value} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKeyDown}
-          placeholder={isRecording ? (interimTranscript || "Listening\u2026") : placeholder} disabled={busy} rows={1}
+        <textarea
+          ref={textareaRef}
+          value={isRecording ? "" : value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isRecording ? (interimTranscript || "Listening\u2026") : placeholder}
+          disabled={busy}
+          rows={1}
+          aria-label="Message input"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-sm leading-relaxed outline-none"
-          style={{ color: "var(--foreground)", minHeight: "56px", maxHeight: "200px" }} />
+          style={{ color: "var(--foreground)", minHeight: "56px", maxHeight: "200px" }}
+        />
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
           <div className="flex items-center gap-2 px-2">
             {voiceState === "speak" && <div className="flex items-center gap-1.5 animate-fade-in"><WaveformBars active mode="speak" bars={5} maxHeight={12} barWidth={2} gap={2} /><span className="text-[10px] font-medium" style={{ color: "var(--success)" }}>Speaking</span></div>}
             {voiceState === "think" && <div className="flex items-center gap-1.5 animate-fade-in"><div className="flex gap-0.5">{[0,150,300].map((d) => <span key={d} className="h-1 w-1 rounded-full animate-pulse" style={{ background: "var(--accent)", animationDelay: `${d}ms` }} />)}</div><span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Thinking</span></div>}
           </div>
-          <button onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerLeave={handlePointerLeave} onClick={busy ? onStop : undefined}
+          <button
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onClick={busy ? onStop : undefined}
             className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 select-none touch-none"
             style={{ background: btnBg, color: btnColor, boxShadow: isRecording ? "0 0 12px color-mix(in srgb, var(--error) 40%, transparent)" : "none" }}
-            title={busy ? "Stop" : isRecording ? "Release to stop" : hasText ? "Send" : "Hold to speak"}>
+            aria-label={busy ? "Stop generation" : isRecording ? "Release to send voice" : hasText ? "Send message (Enter)" : "Hold to record voice"}
+            title={busy ? "Stop" : isRecording ? "Release to stop" : hasText ? "Send (Enter)" : "Hold to speak, tap to toggle mic"}
+          >
             {busy ? <StopIcon /> : isRecording ? <MicIcon size={16} /> : hasText ? <SendIcon size={16} /> : <MicIcon size={16} />}
           </button>
         </div>
       </div>
+    {!isRecording && !busy && (
+      <p className="mt-1 px-1 text-[10px]" style={{ color: "var(--foreground-muted)", opacity: 0.6 }}>
+        <kbd className="font-sans">Enter</kbd> to send &middot; <kbd className="font-sans">Shift+Enter</kbd> for newline
+      </p>
+    )}
     </div>
   );
 }
@@ -534,6 +651,7 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Chat
   const [messages, setMessages] = useState<Message[]>([]);
@@ -561,9 +679,34 @@ export default function ChatPage() {
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const stoppedRef = useRef(false);
 
+  // ── Persist mode across refreshes ─────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("opsvoice-mode") as Mode | null;
+      if (saved === "chat" || saved === "debate") setMode(saved);
+    } catch { /* ok */ }
+  }, []);
+
+  const setModePersisted = useCallback((m: Mode) => {
+    setMode(m);
+    try { localStorage.setItem("opsvoice-mode", m); } catch { /* ok */ }
+  }, []);
+
   const hasMessages = messages.length > 0;
   const debateActive = debatePhase !== "idle";
   const showStarting = mode === "chat" ? !hasMessages : !debateActive;
+
+  // ── Scroll tracking for scroll-to-bottom button ────────────────────────────
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBtn(distFromBottom > 120);
+    };
+    el.addEventListener("scroll", check, { passive: true });
+    return () => el.removeEventListener("scroll", check);
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -591,6 +734,7 @@ export default function ChatPage() {
         latencyMs: m.latency_ms ?? undefined,
       })));
       setConversationId(id); setMode("chat");
+      try { localStorage.setItem("opsvoice-mode", "chat"); } catch { /* ok */ }
     } catch { /* ok */ }
   }, []);
 
@@ -610,8 +754,20 @@ export default function ChatPage() {
   }, [mode, stopAudio]);
 
   const handleModeSwitch = useCallback((m: Mode) => {
-    if (m === mode) return; stopAudio(); setMode(m); setError(null);
-  }, [mode, stopAudio]);
+    if (m === mode) return;
+    stopAudio();
+    setModePersisted(m);
+    setError(null);
+  }, [mode, stopAudio, setModePersisted]);
+
+  // ── Delete conversation from sidebar ──────────────────────────────────────
+  const handleDeleteConv = useCallback((id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (conversationId === id) {
+      setMessages([]);
+      setConversationId(null);
+    }
+  }, [conversationId]);
 
   // ── Chat ──────────────────────────────────────────────────────────────────
   const handleChatSend = useCallback(async (text?: string) => {
@@ -707,8 +863,16 @@ export default function ChatPage() {
   ];
 
   const sidebarToggle = (
-    <button onClick={() => setSidebarOpen((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-all" style={{ color: "var(--foreground-muted)" }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <button
+      onClick={() => setSidebarOpen((v) => !v)}
+      aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+      title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+      className="flex h-8 w-8 items-center justify-center rounded-lg transition-all"
+      style={{ color: "var(--foreground-muted)" }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
       </svg>
     </button>
@@ -722,7 +886,7 @@ export default function ChatPage() {
     return (
       <div className="flex h-[calc(100vh-3.5rem)]">
         <style>{`@keyframes ov-fade-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
-        {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} />}
+        {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} onDeleteConv={handleDeleteConv} />}
         <div className="flex flex-1 flex-col min-w-0 overflow-y-auto" style={{ background: "var(--surface)" }}>
           <div className="px-4 py-2 shrink-0">{sidebarToggle}</div>
           <div className="flex flex-1 flex-col items-center justify-center px-6 pb-12">
@@ -837,9 +1001,15 @@ export default function ChatPage() {
                         <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider px-0.5" style={{ color: "var(--foreground-muted)" }}>{cat.label}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {cat.topics.map((t) => (
-                            <button key={t} onClick={() => setInputValue(t)} disabled={debatePhase === "setup"}
+                            <button
+                              key={t}
+                              onClick={() => setInputValue(t)}
+                              disabled={debatePhase === "setup"}
                               className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-all disabled:opacity-40"
-                              style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                              style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--foreground-muted)"; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+                            >
                               {t}
                             </button>
                           ))}
@@ -869,7 +1039,7 @@ export default function ChatPage() {
   if (mode === "chat") {
     return (
       <div className="flex h-[calc(100vh-3.5rem)]">
-        {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} />}
+        {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} onDeleteConv={handleDeleteConv} />}
         <div className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ background: "var(--surface)" }}>
           <div className="flex items-center gap-2.5 px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
             {sidebarToggle}
@@ -887,18 +1057,35 @@ export default function ChatPage() {
               </button>
             </div>
           )}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
-            <div className="mx-auto max-w-2xl space-y-5">
-              {messages.map((msg, i) => (
-                <ChatMessage key={i} role={msg.role} content={msg.content} model={msg.model} modelProvider={msg.modelProvider} tokens={msg.tokens} latencyMs={msg.latencyMs} />
-              ))}
-              {isLoading && (
-                <div className="flex gap-3 animate-fade-in">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}><MicIcon size={14} /></div>
-                  <div className="py-3 px-1 flex items-center gap-1">{[0,150,300].map((d) => <span key={d} className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "var(--accent)", opacity: 0.6, animationDelay: `${d}ms` }} />)}</div>
-                </div>
-              )}
+          <div className="relative flex-1 min-h-0">
+            <div ref={scrollRef} className="h-full overflow-y-auto px-4 py-6">
+              <div className="mx-auto max-w-2xl space-y-5">
+                {messages.map((msg, i) => (
+                  <ChatMessage key={i} role={msg.role} content={msg.content} model={msg.model} modelProvider={msg.modelProvider} tokens={msg.tokens} latencyMs={msg.latencyMs} />
+                ))}
+                {isLoading && (
+                  <div className="flex gap-3 animate-fade-in">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }} aria-hidden="true"><MicIcon size={14} /></div>
+                    <div className="py-3 px-1 flex items-center gap-1" aria-label="Generating response">{[0,150,300].map((d) => <span key={d} className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "var(--accent)", opacity: 0.6, animationDelay: `${d}ms` }} />)}</div>
+                  </div>
+                )}
+              </div>
             </div>
+            {/* Scroll-to-bottom button */}
+            {showScrollBtn && (
+              <button
+                onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })}
+                aria-label="Scroll to bottom"
+                className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full shadow-md transition-all animate-fade-in"
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--foreground-muted)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="px-4 pt-3 pb-3 shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
             <UnifiedInput value={inputValue} onChange={setInputValue} onSend={() => handleChatSend()} onVoiceTranscript={handleChatSend}
@@ -919,7 +1106,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
       <style>{`@keyframes ov-fade-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} />}
+      {sidebarOpen && <Sidebar conversations={conversations} debates={debates} activeConvId={conversationId} onSelectConv={loadConversation} onNew={handleNew} mode={mode} onSetMode={handleModeSwitch} onDeleteConv={handleDeleteConv} />}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ background: "var(--surface)" }}>
         {/* Top bar */}
         <div className="flex items-center gap-2.5 px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -962,10 +1149,24 @@ export default function ChatPage() {
             </span>
           </div>
           {isDone && (
-            <button onClick={() => { setDebateTurns([]); setCurrentTurn(0); if (debateSession) runDebate(debateSession); }}
+            <button
+              aria-label="Replay debate"
+              onClick={() => {
+                if (!debateSession) return;
+                // Reset all state BEFORE calling runDebate to avoid stale refs
+                stoppedRef.current = false;
+                setDebateTurns([]);
+                setCurrentTurn(0);
+                setActiveAgent(null);
+                setError(null);
+                runDebate(debateSession);
+              }}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold"
-              style={{ background: "var(--surface-raised)", color: "var(--foreground-muted)", border: "1px solid var(--border)" }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              style={{ background: "var(--surface-raised)", color: "var(--foreground-muted)", border: "1px solid var(--border)" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4.99" />
               </svg>
               Replay
