@@ -19,7 +19,7 @@ from app.services.bedrock import BedrockService
 from app.services.minimax_chat import MiniMaxChat
 from app.services.datadog_obs import (
     annotate,
-    annotate_llm_call,
+    llm_span,
     task_span,
     workflow_span,
 )
@@ -89,16 +89,16 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     if len(message) > 32_000:
         raise HTTPException(status_code=400, detail="Message too long (max 32,000 chars)")
 
-    with workflow_span("opusvoice-voice-pipeline"):
+    conv_id = req.conversation_id or str(uuid.uuid4())
+
+    with workflow_span("opusvoice-chat", session_id=conv_id):
         annotate(
             input_data=req.message,
-            tags={"env": "hackathon", "ml_app": "opusvoice"},
+            tags={"feature": "chat", "env": "hackathon", "ml_app": "opusvoice"},
         )
 
         # ── Resolve / create conversation ─────────────────────────────────
-        conv_id = req.conversation_id or str(uuid.uuid4())
-
-        with task_span("db-resolve-conversation"):
+        with task_span("db-resolve-conversation", session_id=conv_id):
             conv = db.query(ConversationRow).filter_by(id=conv_id).first()
             if not conv:
                 conv = ConversationRow(id=conv_id, title=req.message[:80])
@@ -107,7 +107,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
                 db.refresh(conv)
 
         # ── Load recent context ───────────────────────────────────────────
-        with task_span("db-load-history"):
+        with task_span("db-load-history", session_id=conv_id):
             history_rows = (
                 db.query(MessageRow)
                 .filter_by(conversation_id=conv_id)
@@ -120,17 +120,39 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         messages = [{"role": r.role, "content": r.content} for r in history_rows]
         messages.append({"role": "user", "content": message})
 
-        # ── Invoke LLM (Bedrock → MiniMax fallback) ───────────────────────
-        start = time.time()
+        # ── Invoke LLM inside a proper llm_span ───────────────────────────
+        # Using llm_span so Datadog classifies this as an LLM call and tracks
+        # prompt_tokens / completion_tokens in the LLM Observability view.
+        t0 = time.time()
         try:
-            with task_span("llm-invoke"):
+            with llm_span("chat-llm", model_name="claude-sonnet-4", model_provider="aws_bedrock", session_id=conv_id):
+                # Annotate LLM input (list of role/content dicts — standard Datadog format)
+                annotate(
+                    input_data=[{"role": m["role"], "content": m["content"]} for m in messages],
+                )
+
                 result = _infer(messages)
+
+                # Annotate LLM output with Datadog standard metric keys
+                model_id = result.get("model", "unknown")
+                in_tok = result.get("input_tokens", 0)
+                out_tok = result.get("output_tokens", 0)
+                annotate(
+                    output_data=[{"role": "assistant", "content": result["content"]}],
+                    metadata={"model": model_id},
+                    metrics={
+                        "prompt_tokens": float(in_tok),
+                        "completion_tokens": float(out_tok),
+                        "total_tokens": float(in_tok + out_tok),
+                    },
+                )
+
         except Exception as e:
             logger.error("LLM invocation failed: %s", e)
             annotate(tags={"error": "llm_invoke_failed", "error_message": str(e)[:100]})
             raise HTTPException(status_code=502, detail=f"LLM error: {e}")
 
-        latency_ms = round((time.time() - start) * 1000, 1)
+        latency_ms = round((time.time() - t0) * 1000, 1)
 
         response_text = result["content"]
         input_tokens  = result.get("input_tokens", 0)
@@ -148,19 +170,8 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
             model_provider = "unknown"
             model_display = model_id
 
-        # ── Datadog LLM Observability ─────────────────────────────────────
-        annotate_llm_call(
-            input_messages=messages,
-            output_text=response_text,
-            model=model_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=latency_ms,
-            conversation_id=conv_id,
-        )
-
         # ── Persist messages ──────────────────────────────────────────────
-        with task_span("db-persist-messages"):
+        with task_span("db-persist-messages", session_id=conv_id):
             now = datetime.now(timezone.utc)
             db.add(MessageRow(
                 conversation_id=conv_id,
@@ -177,23 +188,20 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
                 output_tokens=output_tokens,
                 latency_ms=latency_ms,
             ))
-            # Touch updated_at so sidebar sorts by last activity
             conv.updated_at = now
             db.commit()
 
+        # ── Annotate the overall workflow span ────────────────────────────
         annotate(
             output_data=response_text,
             tags={
                 "model": model_id,
                 "model_provider": model_provider,
                 "conversation_id": conv_id[:8],
-                "response_chars": str(len(response_text)),
             },
             metrics={
-                "input_tokens": float(input_tokens),
-                "output_tokens": float(output_tokens),
-                "total_tokens": float(input_tokens + output_tokens),
                 "latency_ms": latency_ms,
+                "response_chars": float(len(response_text)),
             },
         )
 
