@@ -292,11 +292,11 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-2">
               {[
-                { label: "LLM Observability", href: `https://${DD_SITE}/llm/traces?query=service%3Aopusvoice`, desc: "LLM spans, tokens, latency per call" },
-                { label: "APM Traces", href: `https://${DD_SITE}/apm/traces?query=service%3Aopusvoice`, desc: "End-to-end request traces" },
-                { label: "APM Service Map", href: `https://${DD_SITE}/apm/map?env=production`, desc: "Service dependencies" },
-                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking?query=service%3Aopusvoice`, desc: "Runtime errors & exceptions" },
-                { label: "Logs", href: `https://${DD_SITE}/logs?query=service%3Aopusvoice`, desc: "Application log stream" },
+                { label: "LLM Observability", href: `https://${DD_SITE}/llm/traces?query=ml_app%3Aopusvoice`, desc: "LLM spans, tokens, latency per call" },
+                { label: "APM Traces", href: `https://${DD_SITE}/apm/traces?query=service%3Aopusvoice-backend`, desc: "End-to-end request traces" },
+                { label: "APM Service Map", href: `https://${DD_SITE}/apm/map?env=hackathon`, desc: "Service dependencies" },
+                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking?query=service%3Aopusvoice-backend`, desc: "Runtime errors & exceptions" },
+                { label: "Logs", href: `https://${DD_SITE}/logs?query=service%3Aopusvoice-backend`, desc: "Application log stream" },
               ].map((link) => (
                 <a
                   key={link.label}

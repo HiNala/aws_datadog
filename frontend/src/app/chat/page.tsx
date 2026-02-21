@@ -682,14 +682,14 @@ export default function ChatPage() {
   // ── Persist mode across refreshes ─────────────────────────────────────────
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("opsvoice-mode") as Mode | null;
+      const saved = localStorage.getItem("opusvoice-mode") as Mode | null;
       if (saved === "chat" || saved === "debate") setMode(saved);
     } catch { /* ok */ }
   }, []);
 
   const setModePersisted = useCallback((m: Mode) => {
     setMode(m);
-    try { localStorage.setItem("opsvoice-mode", m); } catch { /* ok */ }
+    try { localStorage.setItem("opusvoice-mode", m); } catch { /* ok */ }
   }, []);
 
   const hasMessages = messages.length > 0;
@@ -734,7 +734,7 @@ export default function ChatPage() {
         latencyMs: m.latency_ms ?? undefined,
       })));
       setConversationId(id); setMode("chat");
-      try { localStorage.setItem("opsvoice-mode", "chat"); } catch { /* ok */ }
+      try { localStorage.setItem("opusvoice-mode", "chat"); } catch { /* ok */ }
     } catch { /* ok */ }
   }, []);
 
