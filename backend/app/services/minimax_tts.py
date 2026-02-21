@@ -169,6 +169,8 @@ class MiniMaxTTS:
         logger.info("TTS stream: %d chars, voice=%s (turbo)", len(text), voice_id)
 
         total = 0
+        chunk_count = 0
+        chunk_sizes: list[int] = []
         with httpx.Client(timeout=60.0) as client:
             with client.stream("POST", TTS_URL_UW, json=payload, headers=self._headers()) as response:
                 if response.status_code != 200:
@@ -190,17 +192,38 @@ class MiniMaxTTS:
                         except _json.JSONDecodeError:
                             continue
 
-                        # Check for error response
                         base_resp = evt.get("base_resp", {})
                         status_code = base_resp.get("status_code", 0)
                         if status_code != 0:
                             msg = base_resp.get("status_msg", "unknown TTS error")
                             raise RuntimeError(f"MiniMax TTS error ({status_code}): {msg}")
 
+                        has_extra = "extra_info" in evt
                         hex_audio = evt.get("data", {}).get("audio", "")
-                        if hex_audio:
-                            audio_bytes = bytes.fromhex(hex_audio)
-                            total += len(audio_bytes)
-                            yield audio_bytes
+                        if not hex_audio:
+                            continue
 
-        logger.info("TTS stream done: %d bytes decoded audio", total)
+                        audio_bytes = bytes.fromhex(hex_audio)
+                        size = len(audio_bytes)
+
+                        # MiniMax sends a final SSE event with `extra_info` that
+                        # contains ALL the audio concatenated. Skip it — we already
+                        # yielded every incremental chunk.
+                        if has_extra:
+                            logger.info(
+                                "TTS stream: skipping final summary event (%d bytes, "
+                                "already yielded %d bytes in %d chunks)",
+                                size, total, chunk_count,
+                            )
+                            continue
+
+                        chunk_count += 1
+                        chunk_sizes.append(size)
+                        total += size
+                        yield audio_bytes
+
+        logger.info(
+            "TTS stream done: %d bytes in %d chunks (sizes: %s)",
+            total, chunk_count,
+            ", ".join(str(s) for s in chunk_sizes[:10]) + ("..." if len(chunk_sizes) > 10 else ""),
+        )

@@ -57,6 +57,8 @@ interface DebateHistoryItem {
 
 // ── Robust TTS Playback ───────────────────────────────────────────────────────
 
+let _audioPlayId = 0;
+
 async function playAudio(
   text: string,
   voiceId: string | undefined,
@@ -66,9 +68,20 @@ async function playAudio(
   speed?: number,
   pitch?: number,
 ): Promise<void> {
+  // Kill any existing audio immediately
+  if (audioRef.current) {
+    audioRef.current.pause();
+    audioRef.current.src = "";
+    audioRef.current = null;
+  }
+
+  const playId = ++_audioPlayId;
+
   let stream: ReadableStream<Uint8Array>;
   try { stream = await getTextToSpeechStream(text, voiceId, speed, pitch); }
   catch (e) { console.warn("[TTS] fetch failed:", e); onEnd(); return; }
+
+  if (playId !== _audioPlayId) { onEnd(); return; }
 
   const chunks: Uint8Array[] = [];
   const reader = stream.getReader();
@@ -80,7 +93,9 @@ async function playAudio(
     }
   } catch (e) { console.warn("[TTS] read error:", e); onEnd(); return; }
 
+  if (playId !== _audioPlayId) { onEnd(); return; }
   if (chunks.length === 0) { onEnd(); return; }
+
   const totalLen = chunks.reduce((s, c) => s + c.length, 0);
   if (totalLen < 200) {
     const merged = new Uint8Array(totalLen);
@@ -94,9 +109,10 @@ async function playAudio(
   audioRef.current = audio;
   onStart();
   return new Promise<void>((resolve) => {
-    audio.onended = () => { URL.revokeObjectURL(url); onEnd(); resolve(); };
-    audio.onerror = () => { URL.revokeObjectURL(url); onEnd(); resolve(); };
-    audio.play().catch(() => { URL.revokeObjectURL(url); onEnd(); resolve(); });
+    const cleanup = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd(); resolve(); };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    audio.play().catch(cleanup);
   });
 }
 
