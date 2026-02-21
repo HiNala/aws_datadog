@@ -1,15 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   checkHealth,
   getMetrics,
-  listConversations,
-  listDebateSessions,
   type HealthResponse,
   type MetricsResponse,
-  type ConversationSummary,
 } from "@/lib/api";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,13 +22,6 @@ function StatusDot({ ok }: { ok: boolean | null }) {
   );
 }
 
-function timeAgo(iso: string) {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
 
 function fmt(n: number | null | undefined) {
   if (n == null) return "\u2014";
@@ -52,35 +41,20 @@ function Skeleton({ className = "", style = {} }: { className?: string; style?: 
 
 const DD_SITE = "us5.datadoghq.com";
 
-interface DebateSession {
-  session_id: string;
-  topic: string;
-  agent_a_name: string;
-  agent_b_name: string;
-  num_turns: number;
-  created_at: string | null;
-}
-
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [debates, setDebates] = useState<DebateSession[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
     try {
-      const [h, m, c, d] = await Promise.all([
+      const [h, m] = await Promise.all([
         checkHealth(),
         getMetrics().catch(() => null),
-        listConversations(8).catch(() => ({ conversations: [], total: 0 })),
-        listDebateSessions(5).catch(() => ({ sessions: [], total: 0 })),
       ]);
       setHealth(h);
       setMetrics(m);
-      setConversations(c.conversations);
-      setDebates(d.sessions);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to connect");
@@ -158,16 +132,6 @@ export default function DashboardPage() {
                   <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4.99" />
                 </svg>
               </button>
-
-              <Link
-                href="/chat"
-                className="rounded-xl px-4 py-2 text-sm font-medium transition-all"
-                style={{ background: "var(--accent)", color: "#fff" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-              >
-                Chat &amp; Debate
-              </Link>
             </div>
           </div>
         </div>
@@ -321,95 +285,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Recent activity: Debates + Sessions ── */}
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Recent Debates */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>
-                Recent Debates
-              </h2>
-              <Link href="/chat" className="text-[11px] font-medium" style={{ color: "#d97706" }}>
-                New debate &rarr;
-              </Link>
-            </div>
-            <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
-              {debates.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                  <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>No debates yet</p>
-                  <Link href="/chat" className="mt-2 text-xs font-medium" style={{ color: "#d97706" }}>
-                    Start your first debate &rarr;
-                  </Link>
-                </div>
-              ) : (
-                debates.map((d, i) => (
-                  <Link
-                    key={d.session_id}
-                    href="/chat"
-                    className="flex items-center gap-3 px-4 py-3 transition-all"
-                    style={{ borderBottom: i < debates.length - 1 ? "1px solid var(--border)" : "none" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{d.topic}</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "var(--foreground-muted)" }}>
-                        {d.agent_a_name} vs {d.agent_b_name} &middot; {d.num_turns} turns
-                      </p>
-                    </div>
-                    {d.created_at && (
-                      <p className="shrink-0 text-[10px]" style={{ color: "var(--foreground-muted)" }}>{timeAgo(d.created_at)}</p>
-                    )}
-                  </Link>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Recent Sessions */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>
-                Recent Sessions
-              </h2>
-              <Link href="/chat" className="text-[11px] font-medium" style={{ color: "var(--accent)" }}>
-                View all &rarr;
-              </Link>
-            </div>
-            <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
-              {conversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                  <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>No sessions yet</p>
-                  <Link href="/chat" className="mt-2 text-xs font-medium" style={{ color: "var(--accent)" }}>
-                    Start a conversation &rarr;
-                  </Link>
-                </div>
-              ) : (
-                conversations.map((c, i) => (
-                  <Link
-                    key={c.id}
-                    href="/chat"
-                    className="flex items-center gap-3 px-4 py-3 transition-all"
-                    style={{ borderBottom: i < conversations.length - 1 ? "1px solid var(--border)" : "none" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{c.title}</p>
-                      {c.last_message && (
-                        <p className="truncate text-xs mt-0.5" style={{ color: "var(--foreground-muted)" }}>{c.last_message}</p>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>{timeAgo(c.created_at)}</p>
-                      <p className="text-[10px] opacity-50" style={{ color: "var(--foreground-muted)" }}>{c.message_count} msg</p>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
