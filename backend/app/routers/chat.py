@@ -24,7 +24,7 @@ from app.services.datadog_obs import (
     workflow_span,
 )
 
-logger = logging.getLogger("opsvoice.chat")
+logger = logging.getLogger("opusvoice.chat")
 router = APIRouter(prefix="/api", tags=["chat"])
 
 _bedrock: BedrockService | None = None
@@ -89,10 +89,10 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     if len(message) > 32_000:
         raise HTTPException(status_code=400, detail="Message too long (max 32,000 chars)")
 
-    with workflow_span("opsvoice-voice-pipeline"):
+    with workflow_span("opusvoice-voice-pipeline"):
         annotate(
             input_data=req.message,
-            tags={"env": "hackathon", "ml_app": "opsvoice"},
+            tags={"env": "hackathon", "ml_app": "opusvoice"},
         )
 
         # ── Resolve / create conversation ─────────────────────────────────

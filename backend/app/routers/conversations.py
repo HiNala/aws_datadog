@@ -14,7 +14,7 @@ from app.models import (
     MessageRow,
 )
 
-logger = logging.getLogger("opsvoice.conversations")
+logger = logging.getLogger("opusvoice.conversations")
 router = APIRouter(prefix="/api", tags=["conversations"])
 
 

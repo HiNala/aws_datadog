@@ -15,13 +15,13 @@ from typing import Any
 
 from app.config import Settings
 
-logger = logging.getLogger("opsvoice.minimax_chat")
+logger = logging.getLogger("opusvoice.minimax_chat")
 
 MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 MINIMAX_BASE_URL_UW = "https://api.minimax.io/anthropic"  # same endpoint for now
 
 SYSTEM_PROMPT = (
-    "You are OpsVoice, a versatile AI assistant. "
+    "You are OpusVoice, a versatile AI assistant. "
     "You can help with anything: coding, writing, brainstorming, analysis, storytelling, "
     "infrastructure ops, debugging, creative projects, and more. "
     "Keep responses clear and natural — they will be spoken aloud via text-to-speech. "

@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import HealthResponse, MessageRow, ServiceStatus
 
-logger = logging.getLogger("opsvoice.health")
+logger = logging.getLogger("opusvoice.health")
 router = APIRouter(prefix="/api", tags=["health"])
 
 

@@ -45,7 +45,7 @@ export function Logo({ size = 32, className = "" }: LogoProps) {
           letterSpacing: "-0.02em",
         }}
       >
-        OpsVoice
+        OpusVoice
       </span>
     </div>
   );

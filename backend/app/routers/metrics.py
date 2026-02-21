@@ -13,7 +13,7 @@ from app.models import (
     MetricsResponse,
 )
 
-logger = logging.getLogger("opsvoice.metrics")
+logger = logging.getLogger("opusvoice.metrics")
 router = APIRouter(prefix="/api", tags=["metrics"])
 
 

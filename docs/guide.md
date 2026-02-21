@@ -16,7 +16,7 @@
 ## 📋 Table of Contents
 
 1. [Prize Pool & Winning Strategy](#prize-pool--winning-strategy)
-2. [Recommended Build: "OpsVoice"](#recommended-build-opsvoice)
+2. [Recommended Build: "OpusVoice"](#recommended-build-opusvoice)
 3. [Full Stack Architecture](#full-stack-architecture)
 4. [AWS Bedrock + AgentCore Setup](#aws-bedrock--agentcore-setup)
 5. [MiniMax API — Complete Reference](#minimax-api--complete-reference)
@@ -66,7 +66,7 @@ The key insight is to build a **single application** that satisfies all sponsors
 
 ---
 
-## 🚀 Recommended Build: "OpsVoice"
+## 🚀 Recommended Build: "OpusVoice"
 
 ### Concept
 **A voice-enabled conversational AI agent for cloud infrastructure operations.** Engineers ask questions about their infrastructure in plain English (or by voice), and the agent responds with spoken answers backed by real Datadog data, service relationship graphs from Neo4j, and reasoning powered by Claude on Amazon Bedrock.
@@ -83,7 +83,7 @@ The key insight is to build a **single application** that satisfies all sponsors
 - **TestSprite can auto-test your API endpoints** — shows production readiness
 
 ### Elevator Pitch (Memorize This)
-> *"On-call engineers waste hours correlating Datadog metrics, logs, and service maps during incidents. OpsVoice gives you a single voice interface to your entire infrastructure. Ask a question, get a spoken answer. Claude reasons over Datadog context and Neo4j service graphs to tell you exactly what's broken and what's affected — before your customers notice."*
+> *"On-call engineers waste hours correlating Datadog metrics, logs, and service maps during incidents. OpusVoice gives you a single voice interface to your entire infrastructure. Ask a question, get a spoken answer. Claude reasons over Datadog context and Neo4j service graphs to tell you exactly what's broken and what's affected — before your customers notice."*
 
 ---
 
@@ -159,7 +159,7 @@ aws sts get-caller-identity
 
 ```bash
 # Create project directory
-mkdir opsvoice-agent && cd opsvoice-agent
+mkdir opusvoice-agent && cd opusvoice-agent
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -180,7 +180,7 @@ pip install "strands-agents[otel]" aws-opentelemetry-distro
 ### Step 4: Create Your Agent
 
 ```python
-# opsvoice_agent.py
+# opusvoice_agent.py
 
 from strands import Agent, tool
 from strands.models import BedrockModel
@@ -362,7 +362,7 @@ def get_service_blast_radius(service: str) -> str:
 agent = Agent(
     model=model,
     tools=[query_datadog_logs, check_service_monitors, get_service_blast_radius],
-    system_prompt="""You are OpsVoice, an expert AI assistant for cloud infrastructure operations.
+    system_prompt="""You are OpusVoice, an expert AI assistant for cloud infrastructure operations.
 
 You have access to:
 1. Datadog logs and monitors for any service
@@ -396,7 +396,7 @@ if __name__ == "__main__":
 
 ```bash
 # Configure the deployment
-agentcore configure -e opsvoice_agent.py
+agentcore configure -e opusvoice_agent.py
 # Interactive prompts:
 # 1. Execution Role: Press ENTER to auto-create (recommended)
 # 2. ECR Repository: Press ENTER to auto-create
@@ -422,7 +422,7 @@ agentcore invoke --payload '{"prompt": "Is api-gateway healthy right now?"}'
 ### Step 6: AgentCore Memory (Persistent Context)
 
 ```python
-# Add to opsvoice_agent.py for persistent user context
+# Add to opusvoice_agent.py for persistent user context
 
 from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
@@ -433,13 +433,13 @@ client = MemoryClient(region_name="us-west-2")
 
 # Create memory (do once, store the memory_id)
 memory = client.create_memory_and_wait(
-    name="OpsVoiceMemory",
+    name="OpusVoiceMemory",
     description="User preferences, incident history, and service ownership context"
 )
 
 MEM_ID = memory.get("id")
 SESSION_ID = f"session_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-ACTOR_ID = "opsvoice_user"
+ACTOR_ID = "opusvoice_user"
 
 memory_config = AgentCoreMemoryConfig(
     memory_id=MEM_ID,
@@ -1084,9 +1084,9 @@ pip install ddtrace
 export DD_API_KEY="<YOUR_DATADOG_API_KEY>"          # From Datadog → Org Settings → API Keys
 export DD_SITE="datadoghq.com"                        # US1 site
 export DD_LLMOBS_ENABLED="1"                          # Enable LLM Observability
-export DD_LLMOBS_ML_APP="opsvoice"                    # Your app name in Datadog UI
+export DD_LLMOBS_ML_APP="opusvoice"                    # Your app name in Datadog UI
 export DD_LLMOBS_AGENTLESS_ENABLED="true"             # Skip Datadog Agent (critical for hackathon)
-export DD_SERVICE="opsvoice-backend"                  # Service name for APM
+export DD_SERVICE="opusvoice-backend"                  # Service name for APM
 export DD_ENV="hackathon"                             # Environment tag
 ```
 
@@ -1104,9 +1104,9 @@ export DD_ENV="hackathon"                             # Environment tag
 DD_SITE=datadoghq.com \
 DD_API_KEY=$DD_API_KEY \
 DD_LLMOBS_ENABLED=1 \
-DD_LLMOBS_ML_APP=opsvoice \
+DD_LLMOBS_ML_APP=opusvoice \
 DD_LLMOBS_AGENTLESS_ENABLED=true \
-ddtrace-run python opsvoice_agent.py
+ddtrace-run python opusvoice_agent.py
 ```
 
 #### What Gets Traced Automatically
@@ -1189,7 +1189,7 @@ def handle_voice_query(audio_transcript: str):
 from ddtrace.llmobs import LLMObs
 
 LLMObs.enable(
-    ml_app="opsvoice",
+    ml_app="opusvoice",
     api_key=os.environ.get("DD_API_KEY"),
     site="datadoghq.com",
     agentless_enabled=True,
@@ -1214,11 +1214,11 @@ LLMObs.enable(
 ```bash
 # If deploying to Lambda (not AgentCore), instrument this way:
 datadog-ci lambda instrument \
-  -f opsvoice-function \
+  -f opusvoice-function \
   -r us-west-2 \
   -v 122 \
   -e 92 \
-  --llmobs opsvoice
+  --llmobs opusvoice
 ```
 
 ```python
@@ -1240,7 +1240,7 @@ Build a dashboard before the demo and keep it open on your screen during judging
 #### What to Display
 
 ```
-Dashboard: "OpsVoice — Live Agent Metrics"
+Dashboard: "OpusVoice — Live Agent Metrics"
 
 Row 1: Health Overview
 ├── Total LLM Requests (timeseries, last 30 min)
@@ -1275,15 +1275,15 @@ DD_API_KEY = os.environ.get("DD_API_KEY")
 DD_APP_KEY = os.environ.get("DD_APP_KEY")
 
 dashboard_payload = {
-    "title": "OpsVoice — Live Agent Metrics",
-    "description": "Real-time observability for the OpsVoice AI Operations Agent",
+    "title": "OpusVoice — Live Agent Metrics",
+    "description": "Real-time observability for the OpusVoice AI Operations Agent",
     "layout_type": "ordered",
     "widgets": [
         {
             "definition": {
                 "type": "timeseries",
                 "requests": [{
-                    "q": "sum:dd.llmobs.request.count{ml_app:opsvoice}.as_count()",
+                    "q": "sum:dd.llmobs.request.count{ml_app:opusvoice}.as_count()",
                     "display_type": "bars"
                 }],
                 "title": "LLM Requests per Minute"
@@ -1293,7 +1293,7 @@ dashboard_payload = {
             "definition": {
                 "type": "query_value",
                 "requests": [{
-                    "q": "p95:dd.llmobs.request.duration{ml_app:opsvoice}",
+                    "q": "p95:dd.llmobs.request.duration{ml_app:opusvoice}",
                     "aggregator": "avg"
                 }],
                 "title": "P95 Latency (ms)",
@@ -1304,7 +1304,7 @@ dashboard_payload = {
             "definition": {
                 "type": "timeseries",
                 "requests": [{
-                    "q": "sum:dd.llmobs.tokens.input{ml_app:opsvoice} by {model_name}.as_count()",
+                    "q": "sum:dd.llmobs.tokens.input{ml_app:opusvoice} by {model_name}.as_count()",
                     "display_type": "area"
                 }],
                 "title": "Input Tokens by Model"
@@ -1766,7 +1766,7 @@ export default function Dashboard() {
       defaultOpen={true}
       clickOutsideToClose={false}
       labels={{
-        title: "OpsVoice Agent",
+        title: "OpusVoice Agent",
         initial: "👋 I'm your AI operations assistant. Ask me about any service in your infrastructure.",
         placeholder: "Ask about service health, incidents, or blast radius..."
       }}
@@ -1939,7 +1939,7 @@ for r in results:
 
 ### [0:00 - 0:15] Opening Hook
 
-> "On-call engineers waste 2-4 hours per incident manually correlating Datadog logs, metrics, and service maps. OpsVoice gives you a single conversational interface to your entire infrastructure. Let me show you."
+> "On-call engineers waste 2-4 hours per incident manually correlating Datadog logs, metrics, and service maps. OpusVoice gives you a single conversational interface to your entire infrastructure. Let me show you."
 
 ### [0:15 - 1:15] Live Demo
 
@@ -1989,9 +1989,9 @@ export DD_API_KEY="xxx"                    # From: Datadog → Org Settings → 
 export DD_APP_KEY="xxx"                    # From: Datadog → Org Settings → App Keys
 export DD_SITE="datadoghq.com"
 export DD_LLMOBS_ENABLED="1"
-export DD_LLMOBS_ML_APP="opsvoice"
+export DD_LLMOBS_ML_APP="opusvoice"
 export DD_LLMOBS_AGENTLESS_ENABLED="true"
-export DD_SERVICE="opsvoice-backend"
+export DD_SERVICE="opusvoice-backend"
 export DD_ENV="hackathon"
 
 # === MiniMax (for direct HTTP API) ===
@@ -2082,7 +2082,7 @@ python-dotenv
 **Wesley Tillu (Section 32) / Allen Smith (Musa Capital) / Vignesh Ravikumar (Sierra Ventures)**
 - **Want to hear:** Market size, unique angle, path to revenue
 - **Talk about:** Enterprise DevOps market is $10B+, voice interface is a UX breakthrough, existing customers would pay $5K-$50K/year
-- **Say:** "On-call engineers at enterprise companies cost $200K+ per year in salary. If OpsVoice reduces MTTR by 30%, that's $60K in recovered engineer time per senior engineer per year. The ROI case writes itself."
+- **Say:** "On-call engineers at enterprise companies cost $200K+ per year in salary. If OpusVoice reduces MTTR by 30%, that's $60K in recovered engineer time per senior engineer per year. The ROI case writes itself."
 
 ---
 

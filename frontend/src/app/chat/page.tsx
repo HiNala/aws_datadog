@@ -728,7 +728,7 @@ export default function ChatPage() {
           <div className="flex flex-1 flex-col items-center justify-center px-6 pb-12">
             <div className="w-full max-w-2xl" style={{ animation: "ov-fade-up 0.4s ease both" }}>
               <div className="text-center mb-6">
-                <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--foreground)", letterSpacing: "-0.03em" }}>OpsVoice</h1>
+                <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--foreground)", letterSpacing: "-0.03em" }}>OpusVoice</h1>
                 <p className="mt-2 text-sm" style={{ color: "var(--foreground-muted)" }}>
                   {mode === "chat" ? "Ask me anything \u2014 coding, writing, brainstorming, or just a conversation." : "Two AI voices, one topic, live audio debate."}
                 </p>

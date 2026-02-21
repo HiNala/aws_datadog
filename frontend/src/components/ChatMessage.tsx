@@ -68,7 +68,7 @@ export function ChatMessage({
 
   return (
     <div className="flex gap-3 animate-slide-up">
-      {/* OpsVoice avatar */}
+      {/* OpusVoice avatar */}
       <div
         className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
         style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}

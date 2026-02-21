@@ -41,7 +41,7 @@ from app.services.datadog_obs import (
     workflow_span,
 )
 
-logger = logging.getLogger("opsvoice.debate")
+logger = logging.getLogger("opusvoice.debate")
 router = APIRouter(prefix="/api/debate", tags=["debate"])
 
 _VOICE_A_DEFAULT = "English_expressive_narrator"
@@ -124,7 +124,7 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
     with workflow_span("debate-session-start"):
         annotate(
             input_data=topic,
-            tags={"env": "hackathon", "ml_app": "opsvoice", "feature": "debate", "style": style},
+            tags={"env": "hackathon", "ml_app": "opusvoice", "feature": "debate", "style": style},
         )
 
         # ── Generate perspectives ──────────────────────────────────────────

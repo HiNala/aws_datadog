@@ -112,10 +112,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-                Dashboard
+                OpusVoice Dashboard
               </h1>
               <p className="mt-1 text-sm" style={{ color: "var(--foreground-muted)" }}>
-                Live service health, LLM usage, and observability
+                Live health, LLM usage, debate metrics, and Datadog observability
               </p>
             </div>
 
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                 className="rounded-xl px-4 py-2 text-sm font-medium transition-all"
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
-                Chat
+                Chat &amp; Debate
               </Link>
             </div>
           </div>
@@ -260,11 +260,11 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-2">
               {[
-                { label: "LLM Observability", href: `https://${DD_SITE}/llm/traces?query=service%3Aopsvoice`, desc: "LLM spans, tokens, latency per call" },
-                { label: "APM Traces", href: `https://${DD_SITE}/apm/traces?query=service%3Aopsvoice`, desc: "End-to-end request traces" },
+                { label: "LLM Observability", href: `https://${DD_SITE}/llm/traces?query=service%3Aopusvoice`, desc: "LLM spans, tokens, latency per call" },
+                { label: "APM Traces", href: `https://${DD_SITE}/apm/traces?query=service%3Aopusvoice`, desc: "End-to-end request traces" },
                 { label: "APM Service Map", href: `https://${DD_SITE}/apm/map?env=production`, desc: "Service dependencies" },
-                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking?query=service%3Aopsvoice`, desc: "Runtime errors & exceptions" },
-                { label: "Logs", href: `https://${DD_SITE}/logs?query=service%3Aopsvoice`, desc: "Application log stream" },
+                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking?query=service%3Aopusvoice`, desc: "Runtime errors & exceptions" },
+                { label: "Logs", href: `https://${DD_SITE}/logs?query=service%3Aopusvoice`, desc: "Application log stream" },
               ].map((link) => (
                 <a
                   key={link.label}

@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = localStorage.getItem("opsvoice-theme") as Theme | null;
+    const stored = localStorage.getItem("opusvoice-theme") as Theme | null;
     if (stored === "dark") {
       setTheme("dark");
       document.documentElement.classList.add("dark");
@@ -31,7 +31,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggle = () => {
     const next: Theme = theme === "light" ? "dark" : "light";
     setTheme(next);
-    localStorage.setItem("opsvoice-theme", next);
+    localStorage.setItem("opusvoice-theme", next);
     document.documentElement.classList.toggle("dark", next === "dark");
   };
 

@@ -9,7 +9,7 @@ from app.models import TTSRequest
 from app.services.minimax_tts import MiniMaxTTS
 from app.services.datadog_obs import task_span, annotate
 
-logger = logging.getLogger("opsvoice.tts")
+logger = logging.getLogger("opusvoice.tts")
 router = APIRouter(prefix="/api", tags=["tts"])
 
 _tts: MiniMaxTTS | None = None

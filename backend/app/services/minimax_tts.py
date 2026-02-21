@@ -3,7 +3,7 @@ from collections.abc import Iterator
 
 import httpx
 
-logger = logging.getLogger("opsvoice.minimax_tts")
+logger = logging.getLogger("opusvoice.minimax_tts")
 
 TTS_URL = "https://api.minimax.io/v1/t2a_v2"
 TTS_URL_UW = "https://api-uw.minimax.io/v1/t2a_v2"  # lower latency

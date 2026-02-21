@@ -26,7 +26,7 @@ import httpx
 
 from app.config import Settings
 
-logger = logging.getLogger("opsvoice.bedrock")
+logger = logging.getLogger("opusvoice.bedrock")
 
 # ── Model / profile IDs ───────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ MODEL_HAIKU_3      = "anthropic.claude-3-haiku-20240307-v1:0"
 MAX_TOKENS = 2048
 
 SYSTEM_PROMPT = (
-    "You are OpsVoice, a versatile AI assistant powered by Claude. "
+    "You are OpusVoice, a versatile AI assistant powered by Claude. "
     "You can help with anything: coding, writing, brainstorming, analysis, storytelling, "
     "infrastructure ops, debugging, creative projects, and more. "
     "Keep responses clear and natural — they will be spoken aloud via text-to-speech. "

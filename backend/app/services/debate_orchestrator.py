@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.services.bedrock import BedrockService
 from app.services.minimax_chat import MiniMaxChat
 
-logger = logging.getLogger("opsvoice.debate")
+logger = logging.getLogger("opusvoice.debate")
 
 _bedrock: BedrockService | None = None
 _minimax: MiniMaxChat | None = None

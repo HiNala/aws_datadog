@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpsVoice \u2014 AI Conversational Agent",
+  title: "OpusVoice \u2014 AI Conversational Agent",
   description:
     "Voice-enabled conversational AI with live audio debates. Built with AWS Bedrock, Datadog, and MiniMax TTS.",
 };
@@ -29,7 +29,7 @@ export default function RootLayout({
         {/* Prevent flash of wrong theme on load */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('opsvoice-theme');if(t==='dark')document.documentElement.classList.add('dark');})();`,
+            __html: `(function(){var t=localStorage.getItem('opusvoice-theme');if(t==='dark')document.documentElement.classList.add('dark');})();`,
           }}
         />
       </head>

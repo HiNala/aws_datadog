@@ -17,13 +17,13 @@ logging.basicConfig(
     format="%(asctime)s | %(name)-18s | %(levelname)-7s | %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("opsvoice")
+logger = logging.getLogger("opusvoice")
 
 START_TIME = time.time()
 
 app = FastAPI(
-    title="OpsVoice API",
-    description="AI Operations Agent — AWS Bedrock + Datadog + MiniMax",
+    title="OpusVoice API",
+    description="AI Conversational Agent with Live Audio Debates — AWS Bedrock + Datadog + MiniMax TTS",
     version="0.1.0",
 )
 
@@ -57,7 +57,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup():
     settings = get_settings()
     logger.info("=" * 60)
-    logger.info("OpsVoice Backend starting up")
+    logger.info("OpusVoice Backend starting up")
     logger.info("=" * 60)
     settings.log_key_status()
     init_db()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OpsVoice — API Key Diagnostic Script
+OpusVoice — API Key Diagnostic Script
 Run inside backend container:
     docker exec aws-datadog-backend-1 python scripts/test_keys.py
 
@@ -164,7 +164,7 @@ def test_minimax() -> bool:
             headers={"Authorization": f"Bearer {MINIMAX_KEY}", "Content-Type": "application/json"},
             json={
                 "model": "speech-2.8-hd",
-                "text": "OpsVoice is online.",
+                "text": "OpusVoice is online.",
                 "stream": False,
                 "output_format": "hex",
                 "voice_setting": {"voice_id": "English_expressive_narrator", "speed": 1.0, "vol": 1.0, "pitch": 0},
@@ -204,7 +204,7 @@ def test_datadog_api() -> bool:
         warn("Datadog API key", "⚠  NOT SET")
         print(f"\n  {YELLOW}How to get your Datadog keys:{RESET}")
         print(f"  1. Go to  https://app.datadoghq.com/organization-settings/api-keys")
-        print(f"  2. Click  'New Key' → name it 'opsvoice-hackathon'")
+        print(f"  2. Click  'New Key' → name it 'opusvoice-hackathon'")
         print(f"  3. Copy the key → paste into .env as DD_API_KEY=<key>")
         print(f"  4. For DD_APP_KEY: https://app.datadoghq.com/organization-settings/application-keys")
         print(f"  5. Rebuild: docker compose up --build -d")

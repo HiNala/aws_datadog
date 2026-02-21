@@ -2,7 +2,7 @@ import logging
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 
-logger = logging.getLogger("opsvoice")
+logger = logging.getLogger("opusvoice")
 
 
 class Settings(BaseSettings):
@@ -24,13 +24,13 @@ class Settings(BaseSettings):
     dd_app_key: str = ""
     dd_site: str = "us5.datadoghq.com"
     dd_llmobs_enabled: str = "1"
-    dd_llmobs_ml_app: str = "opsvoice"
+    dd_llmobs_ml_app: str = "opusvoice"
     dd_llmobs_agentless_enabled: str = "true"
-    dd_service: str = "opsvoice-backend"
+    dd_service: str = "opusvoice-backend"
     dd_env: str = "hackathon"
 
     # PostgreSQL
-    database_url: str = "postgresql://opsvoice:opsvoice_hack2026@postgres:5432/opsvoice"
+    database_url: str = "postgresql://opusvoice:opusvoice_hack2026@postgres:5432/opusvoice"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

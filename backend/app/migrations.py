@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from app.db import get_db
 
-logger = logging.getLogger("opsvoice.migrations")
+logger = logging.getLogger("opusvoice.migrations")
 
 def run_migrations():
     """

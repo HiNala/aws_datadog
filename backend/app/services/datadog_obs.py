@@ -6,14 +6,14 @@ This module adds manual spans + rich annotations for judges to see in the Datado
 
 Required env vars:
     DD_API_KEY, DD_SITE, DD_LLMOBS_ENABLED=1,
-    DD_LLMOBS_ML_APP=opsvoice, DD_LLMOBS_AGENTLESS_ENABLED=true
+    DD_LLMOBS_ML_APP=opusvoice, DD_LLMOBS_AGENTLESS_ENABLED=true
 """
 
 import contextlib
 import logging
 import os
 
-logger = logging.getLogger("opsvoice.datadog")
+logger = logging.getLogger("opusvoice.datadog")
 
 _llmobs = None
 _enabled: bool | None = None
@@ -43,7 +43,7 @@ def is_enabled() -> bool:
         )
         if _enabled:
             logger.info("Datadog LLM Observability: ENABLED (app=%s)",
-                        os.environ.get("DD_LLMOBS_ML_APP", "opsvoice"))
+                        os.environ.get("DD_LLMOBS_ML_APP", "opusvoice"))
         else:
             logger.info("Datadog LLM Observability: disabled (no DD_API_KEY set)")
     return _enabled
@@ -60,7 +60,7 @@ def setup_observability() -> None:
 
     try:
         llmobs.enable(
-            ml_app=os.environ.get("DD_LLMOBS_ML_APP", "opsvoice"),
+            ml_app=os.environ.get("DD_LLMOBS_ML_APP", "opusvoice"),
             api_key=os.environ.get("DD_API_KEY"),
             site=os.environ.get("DD_SITE", "datadoghq.com"),
             agentless_enabled=True,
@@ -131,7 +131,7 @@ def annotate_llm_call(
     tags: dict[str, str] = {
         "interface": interface,
         "env": os.environ.get("DD_ENV", "hackathon"),
-        "ml_app": os.environ.get("DD_LLMOBS_ML_APP", "opsvoice"),
+        "ml_app": os.environ.get("DD_LLMOBS_ML_APP", "opusvoice"),
     }
     if model:
         tags["model"] = model

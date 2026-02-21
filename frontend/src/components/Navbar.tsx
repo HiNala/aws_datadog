@@ -7,7 +7,7 @@ import { LogoIcon } from "@/components/Logo";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
-  { href: "/chat", label: "Chat" },
+  { href: "/chat", label: "Chat & Debate" },
 ];
 
 function SunIcon() {
@@ -48,7 +48,7 @@ export function Navbar() {
             className="text-sm font-semibold"
             style={{ color: "var(--foreground)", letterSpacing: "-0.02em" }}
           >
-            OpsVoice
+            OpusVoice
           </span>
         </Link>
 

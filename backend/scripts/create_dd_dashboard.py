@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-OpsVoice — Datadog Dashboard Creation Script
+OpusVoice — Datadog Dashboard Creation Script
 
 Run AFTER setting DD_API_KEY and DD_APP_KEY in .env:
     docker exec aws-datadog-backend-1 python scripts/create_dd_dashboard.py
 
-Creates a full "OpsVoice — Live Agent Metrics" dashboard in your Datadog org
+Creates a full "OpusVoice — Live Agent Metrics" dashboard in your Datadog org
 and prints the URL. Open it in Datadog during the demo.
 """
 
@@ -27,7 +27,7 @@ if not DD_API_KEY or DD_API_KEY.startswith("your_"):
     bail(
         "DD_API_KEY is not set.\n"
         "  1. Go to https://app.datadoghq.com/organization-settings/api-keys\n"
-        "  2. Create a new key named 'opsvoice-hackathon'\n"
+        "  2. Create a new key named 'opusvoice-hackathon'\n"
         "  3. Add it to .env as  DD_API_KEY=<key>\n"
         "  4. Rebuild: docker compose up --build -d\n"
         "  5. Re-run this script."
@@ -37,7 +37,7 @@ if not DD_APP_KEY or DD_APP_KEY.startswith("your_"):
     bail(
         "DD_APP_KEY is not set.\n"
         "  1. Go to https://app.datadoghq.com/organization-settings/application-keys\n"
-        "  2. Create a new key named 'opsvoice-hackathon'\n"
+        "  2. Create a new key named 'opusvoice-hackathon'\n"
         "  3. Add it to .env as  DD_APP_KEY=<key>"
     )
 
@@ -56,7 +56,7 @@ if not r.json().get("valid"):
 print(f"  {GREEN}API key valid ✓{RESET}")
 
 # ── Dashboard definition ─────────────────────────────────────────────────────
-ML_APP = "opsvoice"
+ML_APP = "opusvoice"
 
 def ts_widget(title: str, query: str, display="line") -> dict:
     return {
@@ -111,16 +111,16 @@ def group_widget(title: str, widgets: list, layout: str = "ordered") -> dict:
     }
 
 dashboard = {
-    "title": "OpsVoice — Live Agent Metrics",
-    "description": "🎙 Real-time LLM Observability for the OpsVoice AI Operations Agent (Hackathon)",
+    "title": "OpusVoice — Live Agent Metrics",
+    "description": "🎙 Real-time LLM Observability for the OpusVoice AI Operations Agent (Hackathon)",
     "layout_type": "ordered",
     "reflow_type": "fixed",
-    "tags": ["team:opsvoice", "env:hackathon", "ml_app:opsvoice"],
+    "tags": ["team:opusvoice", "env:hackathon", "ml_app:opusvoice"],
     "widgets": [
 
         # ── Header note ───────────────────────────────────────────────────────
         note_widget(
-            "## 🎙 OpsVoice — AI Operations Agent\n\n"
+            "## 🎙 OpusVoice — AI Operations Agent\n\n"
             "**Stack:** Claude on AWS Bedrock → MiniMax TTS → Voice Response\n"
             "**Observability:** Datadog LLM Observability (ddtrace agentless)\n\n"
             f"Filter all widgets to `ml_app:{ML_APP}` | Environment: `hackathon`",
@@ -198,8 +198,8 @@ dashboard = {
             {
                 "definition": {
                     "type": "log_stream",
-                    "title": "Error Logs — opsvoice-backend",
-                    "query": f"service:opsvoice-backend status:error",
+                    "title": "Error Logs — opusvoice-backend",
+                    "query": f"service:opusvoice-backend status:error",
                     "columns": ["host", "service", "message"],
                     "indexes": [],
                     "time": {"live_span": "30m"},
@@ -214,9 +214,9 @@ dashboard = {
             {
                 "definition": {
                     "type": "trace_service",
-                    "service": "opsvoice-backend",
+                    "service": "opusvoice-backend",
                     "env": "hackathon",
-                    "span_name": "opsvoice-chat-request",
+                    "span_name": "opusvoice-chat-request",
                     "show_hits": True,
                     "show_errors": True,
                     "show_latency": True,
@@ -226,7 +226,7 @@ dashboard = {
                     "size_format": "large",
                     "display_format": "three_column",
                     "time": {"live_span": "30m"},
-                    "title": "opsvoice-backend Service Map",
+                    "title": "opusvoice-backend Service Map",
                 }
             }
         ]),
