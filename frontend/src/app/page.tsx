@@ -115,7 +115,7 @@ export default function DashboardPage() {
                 Dashboard
               </h1>
               <p className="mt-1 text-sm" style={{ color: "var(--foreground-muted)" }}>
-                Live service health and LLM metrics
+                Live service health, LLM usage, and observability
               </p>
             </div>
 
@@ -187,37 +187,52 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Token usage */}
+          {/* LLM + Debate Metrics */}
           <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
             <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ color: "var(--foreground-muted)" }}>
               LLM Usage
             </h2>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               {[
-                { label: "Messages", value: fmt(metrics?.total_messages) },
-                { label: "Conversations", value: fmt(metrics?.total_conversations) },
-                { label: "Input tokens", value: fmt(metrics?.total_input_tokens), accent: true },
-                { label: "Output tokens", value: fmt(metrics?.total_output_tokens), accent: true },
+                { label: "Chat Messages", value: fmt(metrics?.total_messages), color: "var(--accent)" },
+                { label: "Conversations", value: fmt(metrics?.total_conversations), color: "var(--accent)" },
+                { label: "Debates", value: fmt(metrics?.total_debates), color: "#d97706" },
+                { label: "Debate Turns", value: fmt(metrics?.total_debate_turns), color: "#d97706" },
               ].map((m) => (
-                <div key={m.label} className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: "var(--foreground)" }}>{m.label}</span>
-                  <span className="text-sm font-mono font-medium tabular-nums" style={{ color: m.accent ? "var(--accent)" : "var(--foreground)" }}>
-                    {m.value}
-                  </span>
+                <div key={m.label} className="rounded-lg p-2.5" style={{ background: "var(--surface)" }}>
+                  <p className="text-[10px] font-medium" style={{ color: "var(--foreground-muted)" }}>{m.label}</p>
+                  <p className="text-lg font-bold font-mono tabular-nums mt-0.5" style={{ color: m.color }}>{m.value}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-4 pt-3 space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
+            <div className="space-y-2 mb-3">
+              {[
+                { label: "Total tokens (in/out)", value: `${fmt((metrics?.total_input_tokens ?? 0) + (metrics?.debate_input_tokens ?? 0))} / ${fmt((metrics?.total_output_tokens ?? 0) + (metrics?.debate_output_tokens ?? 0))}` },
+                { label: "TTS requests", value: fmt(metrics?.tts_requests) },
+              ].map((m) => (
+                <div key={m.label} className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color: "var(--foreground-muted)" }}>{m.label}</span>
+                  <span className="text-xs font-mono font-medium" style={{ color: "var(--foreground)" }}>{m.value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-3 space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
               <div className="flex items-center justify-between">
-                <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>Avg latency</span>
+                <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>Chat avg latency</span>
                 <span className="text-xs font-mono" style={{ color: "var(--foreground)" }}>
                   {metrics?.avg_latency_ms != null ? `${Math.round(metrics.avg_latency_ms)}ms` : "\u2014"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>P95 latency</span>
+                <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>Chat P95 latency</span>
                 <span className="text-xs font-mono" style={{ color: "var(--foreground)" }}>
                   {metrics?.p95_latency_ms != null ? `${Math.round(metrics.p95_latency_ms)}ms` : "\u2014"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px]" style={{ color: "var(--foreground-muted)" }}>Debate avg latency</span>
+                <span className="text-xs font-mono" style={{ color: "#d97706" }}>
+                  {metrics?.debate_avg_latency_ms != null ? `${Math.round(metrics.debate_avg_latency_ms)}ms` : "\u2014"}
                 </span>
               </div>
             </div>
@@ -245,9 +260,11 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-2">
               {[
-                { label: "LLM Traces", href: `https://${DD_SITE}/llm/traces`, desc: "Invocations, tokens, latency" },
-                { label: "APM Services", href: `https://${DD_SITE}/apm/services`, desc: "Distributed traces" },
-                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking`, desc: "Backend errors" },
+                { label: "LLM Observability", href: `https://${DD_SITE}/llm/traces?query=service%3Aopsvoice`, desc: "LLM spans, tokens, latency per call" },
+                { label: "APM Traces", href: `https://${DD_SITE}/apm/traces?query=service%3Aopsvoice`, desc: "End-to-end request traces" },
+                { label: "APM Service Map", href: `https://${DD_SITE}/apm/map?env=production`, desc: "Service dependencies" },
+                { label: "Error Tracking", href: `https://${DD_SITE}/error-tracking?query=service%3Aopsvoice`, desc: "Runtime errors & exceptions" },
+                { label: "Logs", href: `https://${DD_SITE}/logs?query=service%3Aopsvoice`, desc: "Application log stream" },
               ].map((link) => (
                 <a
                   key={link.label}

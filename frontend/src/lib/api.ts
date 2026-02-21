@@ -64,6 +64,12 @@ export interface MetricsResponse {
   avg_latency_ms: number | null;
   p95_latency_ms: number | null;
   models_used: string[];
+  total_debates: number;
+  total_debate_turns: number;
+  debate_input_tokens: number;
+  debate_output_tokens: number;
+  debate_avg_latency_ms: number | null;
+  tts_requests: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,12 +169,14 @@ export async function getMetrics(): Promise<MetricsResponse> {
  */
 export async function getTextToSpeechStream(
   text: string,
-  voiceId?: string
+  voiceId?: string,
+  speed?: number,
+  pitch?: number,
 ): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch(`${API_BASE}/api/tts/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voice_id: voiceId }),
+    body: JSON.stringify({ text, voice_id: voiceId, speed: speed ?? 1.05, pitch: pitch ?? 0 }),
   });
 
   if (!res.ok) {

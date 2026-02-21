@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpsVoice — AI Operations Agent",
+  title: "OpsVoice \u2014 AI Conversational Agent",
   description:
-    "Voice-enabled conversational AI for cloud infrastructure operations. Built with AWS Bedrock, Datadog, and MiniMax.",
+    "Voice-enabled conversational AI with live audio debates. Built with AWS Bedrock, Datadog, and MiniMax TTS.",
 };
 
 export default function RootLayout({

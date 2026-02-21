@@ -79,7 +79,7 @@ def _infer(messages: list[dict]) -> dict:
 # Perspective generation
 # ---------------------------------------------------------------------------
 
-_PERSPECTIVE_SYSTEM_STANDARD = """You are a debate format architect. Given a topic, craft two contrasting but intellectually legitimate perspectives for a structured dialogue.
+_PERSPECTIVE_SYSTEM_STANDARD = """You are a debate format architect. Given ANY topic (technology, philosophy, culture, sports, science, politics, art, food, or anything else), craft two contrasting but intellectually legitimate perspectives for a structured dialogue.
 
 Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
 {
@@ -94,29 +94,31 @@ Return ONLY valid JSON — no markdown, no explanation — with this exact shape
 }
 
 Rules:
-- Names must be evocative and distinct (e.g. "The Pragmatist", "The Visionary", "The Skeptic")
+- Names must be evocative and distinct (e.g. "The Pragmatist", "The Visionary", "The Skeptic", "The Purist")
 - Perspectives must be intellectually genuine — not strawmen
 - The two positions should create productive tension, not just be opposites
-- Keep perspective sentences under 20 words"""
+- Keep perspective sentences under 20 words
+- Works for ANY subject — not just tech"""
 
-_PERSPECTIVE_SYSTEM_RAP_BATTLE = """You are a hip-hop battle organizer. Given a tech topic, create two rapper personas who represent opposing sides.
+_PERSPECTIVE_SYSTEM_RAP_BATTLE = """You are a legendary hip-hop battle MC organizer. Given a topic, create two rapper personas who will battle head-to-head with opposing stances.
 
 Return ONLY valid JSON — no markdown, no explanation — with this exact shape:
 {
   "agent_a": {
-    "name": "MC [Tech Name]",
-    "perspective": "One rhyming couplet stating their stance."
+    "name": "MC [Creative Name]",
+    "perspective": "I spit [their stance] and drop it like a beat, you can't compete"
   },
   "agent_b": {
-    "name": "Lil [Tech Name]",
-    "perspective": "One rhyming couplet stating their contrasting stance."
+    "name": "Lil [Creative Name]",
+    "perspective": "I ride the wave of [their stance], leave you behind every time"
   }
 }
 
 Rules:
-- Names should be funny tech puns (e.g. "MC Monolith", "Lil K8s", "DJ Docker")
-- Perspectives must be rhyming bars
-- Keep it high energy"""
+- Names MUST be creative rapper names with tech or topic puns (e.g. "MC Monolith", "Lil Lambda", "DJ Dockerfile", "Notorious B.U.G.")
+- Perspectives must be a single rhyming bar that states their stance with swagger
+- Make the personas feel like real battle rappers with attitude and confidence
+- Keep it high energy — these are performers, not professors"""
 
 _PERSPECTIVE_SYSTEM_BLAME_GAME = """You are a corporate HR mediator for a tech incident. Given an outage scenario, create two employees blaming each other.
 
@@ -236,18 +238,39 @@ Delivery rules — follow precisely:
 - Do not introduce yourself or state your name
 - Do not start with "I" — vary your sentence openings"""
 
-_TURN_SYSTEM_RAP_BATTLE = """You are {agent_name}, a tech rapper in a battle.
+_TURN_SYSTEM_RAP_BATTLE = """You are {agent_name}, a battle rapper with FIRE delivery.
 
-Your position: {agent_perspective}
+Your stance: {agent_perspective}
 Topic: {topic}
+Your opponent: {opponent_name}
 
-Delivery rules:
-- Write 2 verses (8-12 bars total)
-- RHYME SCHEME IS MANDATORY (AABB or ABAB)
-- Roast the opponent's tech choices
-- Use slang but keep it technical (mention specific AWS services, coding terms)
-- NO MARKDOWN, just text
-- Keep it rhythmic for TTS"""
+You are in a LIVE RAP BATTLE. Your words will be spoken aloud by a text-to-speech voice, so write for SPOKEN RHYTHM, not reading.
+
+STRICT FORMAT — ONE SHORT VERSE:
+- Write EXACTLY 4-6 lines (bars). No more. This is ONE verse, not a full song.
+- Each line is ONE bar. Keep bars SHORT (8-14 words max per line).
+- Use AABB rhyme scheme (consecutive lines rhyme). Every. Single. Line. Must. Rhyme.
+- Use INTERNAL RHYMES and MULTI-SYLLABIC rhymes for flow (e.g. "cloud formation / loud migration")
+- Add PUNCH LINES — the last 1-2 bars should be a devastating closer
+
+STYLE RULES:
+- RAP, don't lecture. Short punchy phrases, not paragraphs.
+- DISS your opponent directly by name. Call them out. Be savage.
+- Reference specific tech (AWS, Bedrock, Lambda, Docker, K8s, APIs, etc.) as metaphors
+- Use hip-hop slang naturally: bars, flow, spit, drop, fire, stack, clap back
+- Vary your cadence — some lines fast, some with pauses for emphasis
+- Add commas for rhythmic pauses where a rapper would breathe
+- NO markdown, NO bullets, NO quotation marks, NO stage directions
+- Do NOT introduce yourself or say your name
+- Do NOT start with "Yo" on every verse — vary your openings
+
+EXAMPLE of good 4-bar verse rhythm:
+Lambda functions calling, my pipelines never lag,
+Your deployment's so slow, it came with a price tag,
+I got real-time streaming while you reading the docs,
+Claude Sonnet on my team, and your model just talks.
+
+NOW WRITE YOUR VERSE. Remember: 4-6 bars, rhyming, punchy, diss your opponent."""
 
 _TURN_SYSTEM_BLAME_GAME = """You are {agent_name}, in a heated argument about an outage.
 
@@ -311,23 +334,41 @@ def generate_turn(
         agent_name=agent_name,
         agent_perspective=agent_perspective,
         topic=topic,
+        opponent_name=opponent_name,
     )
 
     # Build conversation history as a readable context block
+    is_rap = style == "rap_battle"
+
     if not history:
-        user_content = (
-            f"This is Turn 1. Please give your opening statement on the topic: {topic}"
-        )
+        if is_rap:
+            user_content = (
+                f"The crowd is hyped. You're up first. Topic: {topic}\n"
+                f"Drop your opening verse — 4-6 bars, make it HIT."
+            )
+        else:
+            user_content = (
+                f"This is Turn 1. Please give your opening statement on the topic: {topic}"
+            )
     else:
         lines = []
         for h in history:
             speaker = h["name"]
             lines.append(f"{speaker}: {h['text']}")
         convo_block = "\n\n---\n\n".join(lines)
-        user_content = (
-            f"Debate so far:\n\n{convo_block}\n\n"
-            f"---\n\nThis is Turn {turn_number}. Now make your argument."
-        )
+        if is_rap:
+            last_speaker = history[-1]["name"]
+            user_content = (
+                f"Battle so far:\n\n{convo_block}\n\n"
+                f"---\n\n{last_speaker} just dropped their verse. "
+                f"CLAP BACK. Reference what they said, flip their lines, and go HARDER. "
+                f"4-6 bars. Make the crowd lose it."
+            )
+        else:
+            user_content = (
+                f"Debate so far:\n\n{convo_block}\n\n"
+                f"---\n\nThis is Turn {turn_number}. Now make your argument."
+            )
 
     messages = [
         {"role": "system", "content": system},

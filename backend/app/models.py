@@ -80,6 +80,8 @@ class TTSRequest(BaseModel):
     text: str
     voice_id: str = "English_expressive_narrator"
     emotion: str | None = None
+    speed: float = 1.05
+    pitch: int = 0
 
 
 class ServiceStatus(BaseModel):
@@ -142,6 +144,12 @@ class MetricsResponse(BaseModel):
     avg_latency_ms: float | None
     p95_latency_ms: float | None
     models_used: list[str]
+    total_debates: int = 0
+    total_debate_turns: int = 0
+    debate_input_tokens: int = 0
+    debate_output_tokens: int = 0
+    debate_avg_latency_ms: float | None = None
+    tts_requests: int = 0
 
 
 # ---------------------------------------------------------------------------

@@ -63,9 +63,11 @@ async function playAudio(
   onStart: () => void,
   onEnd: () => void,
   audioRef: React.MutableRefObject<HTMLAudioElement | null>,
+  speed?: number,
+  pitch?: number,
 ): Promise<void> {
   let stream: ReadableStream<Uint8Array>;
-  try { stream = await getTextToSpeechStream(text, voiceId); }
+  try { stream = await getTextToSpeechStream(text, voiceId, speed, pitch); }
   catch (e) { console.warn("[TTS] fetch failed:", e); onEnd(); return; }
 
   const chunks: Uint8Array[] = [];
@@ -337,7 +339,7 @@ function UnifiedInput({ value, onChange, onSend, onVoiceTranscript, isLoading, v
 
 // ── Turn Card (debate split view) ─────────────────────────────────────────────
 
-function TurnCard({ turn, agent, delayIndex }: { turn: TurnDisplay; agent: "a" | "b"; delayIndex: number }) {
+function TurnCard({ turn, agent, delayIndex, isRap }: { turn: TurnDisplay; agent: "a" | "b"; delayIndex: number; isRap?: boolean }) {
   const c = agentColor(agent);
   return (
     <div className="rounded-xl p-4 transition-all duration-300"
@@ -350,20 +352,22 @@ function TurnCard({ turn, agent, delayIndex }: { turn: TurnDisplay; agent: "a" |
       {turn.isThinking ? (
         <div className="flex items-center gap-2 py-2">
           <WaveformBars active mode="think" bars={5} maxHeight={14} barWidth={2} gap={2} />
-          <span className="text-xs italic" style={{ color: "var(--foreground-muted)" }}>Crafting argument&hellip;</span>
+          <span className="text-xs italic" style={{ color: "var(--foreground-muted)" }}>{isRap ? "Writing bars\u2026" : "Crafting argument\u2026"}</span>
         </div>
       ) : (
         <>
           <div className="flex items-center gap-2 mb-2.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: c.solid }}>Turn {turn.turnNumber}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: c.solid }}>
+              {isRap ? `Verse ${turn.turnNumber}` : `Turn ${turn.turnNumber}`}
+            </span>
             {turn.latencyMs && <span className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>{Math.round(turn.latencyMs)}ms</span>}
             {turn.isPlaying && <WaveformBars active mode="speak" bars={4} maxHeight={12} barWidth={2} gap={2} />}
           </div>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--foreground)" }}>{turn.text}</p>
+          <p className={`text-sm whitespace-pre-wrap ${isRap ? "leading-loose font-medium" : "leading-relaxed"}`} style={{ color: "var(--foreground)" }}>{turn.text}</p>
           {turn.model && !turn.isPlaying && (
             <div className="mt-2.5">
               <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "var(--surface-overlay)", color: "var(--foreground-muted)" }}>
-                {turn.model.includes("claude") ? "Claude · Bedrock" : turn.model.split("/").pop()}
+                {turn.model.includes("claude") ? "Claude \u00b7 Bedrock" : turn.model.split("/").pop()}
               </span>
             </div>
           )}
@@ -375,9 +379,9 @@ function TurnCard({ turn, agent, delayIndex }: { turn: TurnDisplay; agent: "a" |
 
 // ── Split Debate View ─────────────────────────────────────────────────────────
 
-function DebateSplitView({ session, turns, activeAgent, debatePhase }: {
+function DebateSplitView({ session, turns, activeAgent, debatePhase, debateStyle }: {
   session: DebateSessionResponse; turns: TurnDisplay[];
-  activeAgent: "a" | "b" | null; debatePhase: DebatePhase;
+  activeAgent: "a" | "b" | null; debatePhase: DebatePhase; debateStyle?: string;
 }) {
   const colARef = useRef<HTMLDivElement>(null);
   const colBRef = useRef<HTMLDivElement>(null);
@@ -412,8 +416,8 @@ function DebateSplitView({ session, turns, activeAgent, debatePhase }: {
           </div>
         </div>
         <div ref={colARef} className="flex-1 overflow-y-auto p-4 space-y-3">
-          {turnsA.map((t, i) => <TurnCard key={t.turnNumber} turn={t} agent="a" delayIndex={i} />)}
-          {turnsA.length === 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>Awaiting opening statement&hellip;</p>}
+          {turnsA.map((t, i) => <TurnCard key={t.turnNumber} turn={t} agent="a" delayIndex={i} isRap={debateStyle === "rap_battle"} />)}
+          {turnsA.length === 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>{debateStyle === "rap_battle" ? "Stepping to the mic\u2026" : "Awaiting opening statement\u2026"}</p>}
         </div>
       </div>
 
@@ -436,9 +440,9 @@ function DebateSplitView({ session, turns, activeAgent, debatePhase }: {
           </div>
         </div>
         <div ref={colBRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-          {turnsB.map((t, i) => <TurnCard key={t.turnNumber} turn={t} agent="b" delayIndex={i} />)}
-          {turnsB.length === 0 && turnsA.length > 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>Preparing response&hellip;</p>}
-          {turnsB.length === 0 && turnsA.length === 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>Awaiting debate start&hellip;</p>}
+          {turnsB.map((t, i) => <TurnCard key={t.turnNumber} turn={t} agent="b" delayIndex={i} isRap={debateStyle === "rap_battle"} />)}
+          {turnsB.length === 0 && turnsA.length > 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>{debateStyle === "rap_battle" ? "Loading the clap back\u2026" : "Preparing response\u2026"}</p>}
+          {turnsB.length === 0 && turnsA.length === 0 && <p className="text-xs text-center py-10" style={{ color: "var(--foreground-muted)" }}>{debateStyle === "rap_battle" ? "Waiting for the beat\u2026" : "Awaiting debate start\u2026"}</p>}
         </div>
       </div>
     </div>
@@ -482,11 +486,26 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 
 // ── Topic categories ──────────────────────────────────────────────────────────
 
-const DEBATE_STARTERS = [
-  { label: "AI & Tech", topics: ["Should AI replace developers?", "Is open source better than proprietary software?", "Does social media do more harm than good?"] },
-  { label: "Work & Society", topics: ["Is remote work better than office work?", "Should the 4-day work week be standard?", "Is UBI the future of economics?"] },
-  { label: "Infrastructure", topics: ["Microservices vs monolith?", "Cloud-native vs on-prem?", "Is Kubernetes worth the complexity?"] },
-];
+const DEBATE_STARTERS: Record<string, { label: string; topics: string[] }[]> = {
+  standard: [
+    { label: "Tech & AI", topics: ["Should AI replace developers?", "Is open source better than proprietary?", "Will AGI happen in the next 5 years?"] },
+    { label: "Culture", topics: ["Is remote work better than office?", "Are college degrees still worth it?", "Does social media do more harm than good?"] },
+    { label: "Big Questions", topics: ["Is free will an illusion?", "Should we colonize Mars or fix Earth first?", "Is capitalism the best system we have?"] },
+  ],
+  rap_battle: [
+    { label: "Tech Beef", topics: ["AWS vs Azure \u2014 who runs the cloud?", "Python vs Rust \u2014 which language is the GOAT?", "Tabs vs spaces \u2014 settle it once and for all"] },
+    { label: "Culture Wars", topics: ["East coast vs west coast hip hop", "Movies vs TV shows \u2014 which is the superior art form?", "Morning people vs night owls \u2014 who wins at life?"] },
+    { label: "Hackathon Heat", topics: ["rap battle about the AWS x Anthropic x Datadog GenAI Hackathon \u2014 $35K+ in Prizes", "Frontend devs vs backend devs \u2014 who carries the team?", "Claude vs GPT \u2014 battle of the AI models"] },
+  ],
+  blame_game: [
+    { label: "Tech Fails", topics: ["The database went down during peak traffic", "Production deploy broke the checkout flow", "The intern pushed to main on a Friday at 5pm"] },
+    { label: "Life Blame", topics: ["Who forgot to book the restaurant?", "Why is the group project always late?", "Who lost the TV remote again?"] },
+  ],
+  roast: [
+    { label: "Tech Roasts", topics: ["JavaScript ecosystem churn", "AI-generated code quality", "Meetings that could have been emails"] },
+    { label: "Life Roasts", topics: ["People who say 'I'll start Monday'", "Reply-all email culture", "LinkedIn influencer posts"] },
+  ],
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -519,6 +538,10 @@ export default function ChatPage() {
   const [voiceA, setVoiceA] = useState("English_expressive_narrator");
   const [voiceB, setVoiceB] = useState("Deep_Voice_Man");
   const [style, setStyle] = useState("standard");
+  const handleStyleChange = useCallback((s: string) => {
+    setStyle(s);
+    if (s === "rap_battle") setNumTurns((prev) => Math.max(prev, 8));
+  }, []);
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const stoppedRef = useRef(false);
 
@@ -528,7 +551,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isLoading]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
@@ -562,10 +585,12 @@ export default function ChatPage() {
     setVoiceState("idle");
   }, []);
 
+  const sendingRef = useRef(false);
+
   const handleNew = useCallback(() => {
-    if (mode === "chat") { setMessages([]); setConversationId(null); }
+    if (mode === "chat") { setMessages([]); setConversationId(null); sendingRef.current = false; }
     else { stoppedRef.current = true; stopAudio(); setDebatePhase("idle"); setDebateSession(null); setDebateTurns([]); setCurrentTurn(0); setActiveAgent(null); }
-    setInputValue(""); setError(null); setVoiceState("idle");
+    setInputValue(""); setError(null); setVoiceState("idle"); setIsLoading(false);
   }, [mode, stopAudio]);
 
   const handleModeSwitch = useCallback((m: Mode) => {
@@ -573,10 +598,11 @@ export default function ChatPage() {
   }, [mode, stopAudio]);
 
   // ── Chat ──────────────────────────────────────────────────────────────────
-
   const handleChatSend = useCallback(async (text?: string) => {
     const msg = (text ?? inputValue).trim();
-    if (!msg || isLoading) return;
+    if (!msg || isLoading || sendingRef.current) return;
+    sendingRef.current = true;
+    stopAudio();
     setMessages((p) => [...p, { role: "user", content: msg }]);
     setInputValue(""); setIsLoading(true); setVoiceState("think"); setError(null);
     try {
@@ -584,14 +610,15 @@ export default function ChatPage() {
       setConversationId(d.conversation_id);
       setMessages((p) => [...p, { role: "assistant", content: d.response, model: d.model, modelProvider: d.model_provider, tokens: d.tokens, latencyMs: d.latency_ms }]);
       refreshConversations();
+      if (!sendingRef.current) return;
       await playAudio(d.response, undefined, () => setVoiceState("speak"), () => setVoiceState("idle"), audioRef);
     } catch (e) {
       const msg2 = e instanceof Error ? e.message : "Something went wrong";
       setError(msg2);
       setMessages((p) => [...p, { role: "assistant", content: `Sorry, I encountered an error: ${msg2}` }]);
       setVoiceState("idle");
-    } finally { setIsLoading(false); }
-  }, [conversationId, refreshConversations, inputValue, isLoading]);
+    } finally { setIsLoading(false); sendingRef.current = false; }
+  }, [conversationId, refreshConversations, inputValue, isLoading, stopAudio]);
 
   // ── Debate ────────────────────────────────────────────────────────────────
 
@@ -604,7 +631,7 @@ export default function ChatPage() {
       setDebateTurns((p) => [...p, { turnNumber: turn, agent, agentName: agent === "a" ? sess.agent_a.name : sess.agent_b.name, text: "", isThinking: true, isPlaying: false }]);
 
       let turnText = "", turnVoice = agent === "a" ? sess.agent_a.voice : sess.agent_b.voice;
-      let turnModel = "", turnLatency = 0;
+      let turnModel = "", turnLatency = 0, turnTtsSpeed = 1.05, turnTtsPitch = 0;
       try {
         const sseStream = await streamDebateTurn(sess.session_id, turn);
         await parseSSE(sseStream, (evt) => {
@@ -613,6 +640,8 @@ export default function ChatPage() {
             turnVoice = (evt.voice as string) || turnVoice;
             turnModel = (evt.model as string) || "";
             turnLatency = (evt.latency_ms as number) || 0;
+            turnTtsSpeed = (evt.tts_speed as number) || 1.05;
+            turnTtsPitch = (evt.tts_pitch as number) || 0;
             setDebateTurns((p) => p.map((t, i) => i === p.length - 1 ? { ...t, text: turnText, isThinking: false, model: turnModel, latencyMs: turnLatency } : t));
           }
         });
@@ -626,7 +655,7 @@ export default function ChatPage() {
         setDebateTurns((p) => p.map((t, i) => i === p.length - 1 ? { ...t, isPlaying: true } : t));
         await playAudio(turnText, turnVoice, () => {}, () => {
           setDebateTurns((p) => p.map((t, i) => i === p.length - 1 ? { ...t, isPlaying: false } : t));
-        }, audioRef);
+        }, audioRef, turnTtsSpeed, turnTtsPitch);
       }
       setActiveAgent(null);
     }
@@ -645,14 +674,21 @@ export default function ChatPage() {
       setError(e instanceof Error ? e.message : "Failed to start debate");
       setDebatePhase("error");
     }
-  }, [inputValue, numTurns, voiceA, voiceB, runDebate]);
+  }, [inputValue, numTurns, style, voiceA, voiceB, runDebate]);
 
   const handleDebateStop = useCallback(() => {
     stoppedRef.current = true; stopAudio(); setActiveAgent(null); setDebatePhase("complete");
     setDebateTurns((p) => p.map((t) => t.isThinking ? { ...t, isThinking: false, text: "[Stopped]" } : { ...t, isPlaying: false }));
   }, [stopAudio]);
 
-  const CHAT_STARTERS = ["Is api-gateway healthy?", "Blast radius if postgres fails?", "Any P1 incidents right now?", "Summarize this week\u2019s alerts"];
+  const CHAT_STARTERS = [
+    "Tell me a creative story",
+    "Explain quantum computing simply",
+    "Help me debug a Python error",
+    "What\u2019s the best approach to system design?",
+    "Write a haiku about AI",
+    "Compare React vs Vue",
+  ];
 
   const sidebarToggle = (
     <button onClick={() => setSidebarOpen((v) => !v)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-all" style={{ color: "var(--foreground-muted)" }}>
@@ -678,7 +714,7 @@ export default function ChatPage() {
               <div className="text-center mb-6">
                 <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--foreground)", letterSpacing: "-0.03em" }}>OpsVoice</h1>
                 <p className="mt-2 text-sm" style={{ color: "var(--foreground-muted)" }}>
-                  {mode === "chat" ? "Ask about incidents, services, latency, or anything in your infrastructure." : "Two AI voices, one topic, live audio debate."}
+                  {mode === "chat" ? "Ask me anything \u2014 coding, writing, brainstorming, or just a conversation." : "Two AI voices, one topic, live audio debate."}
                 </p>
                 <div className="mt-5"><ModeToggle mode={mode} onChange={handleModeSwitch} /></div>
               </div>
@@ -687,7 +723,7 @@ export default function ChatPage() {
               {mode === "chat" && (
                 <>
                   <UnifiedInput value={inputValue} onChange={setInputValue} onSend={() => handleChatSend()} onVoiceTranscript={handleChatSend}
-                    isLoading={isLoading} voiceState={voiceState} onStop={() => { setIsLoading(false); stopAudio(); }} placeholder="Ask about your infrastructure\u2026" centered />
+                    isLoading={isLoading} voiceState={voiceState} onStop={() => { setIsLoading(false); stopAudio(); }} placeholder="Ask anything\u2026" centered />
                   <div className="mt-4 flex flex-wrap justify-center gap-2">
                     {CHAT_STARTERS.map((p) => (
                       <button key={p} onClick={() => handleChatSend(p)} disabled={isLoading}
@@ -726,9 +762,9 @@ export default function ChatPage() {
                   {/* Controls row: turns + style + voice toggle */}
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--foreground-muted)" }}>Turns</span>
+                      <span className="text-[11px] font-medium" style={{ color: "var(--foreground-muted)" }}>Rounds</span>
                       <div className="flex gap-1.5">
-                        {[4, 6, 8].map((n) => (
+                        {(style === "rap_battle" ? [6, 8, 10, 12] : [4, 6, 8]).map((n) => (
                           <button key={n} onClick={() => setNumTurns(n)} className="rounded-lg px-3 py-1 text-xs font-semibold transition-all"
                             style={{ background: numTurns === n ? "var(--warning)" : "var(--surface-raised)", color: numTurns === n ? "#fff" : "var(--foreground-muted)", border: `1px solid ${numTurns === n ? "transparent" : "var(--border)"}` }}>
                             {n}
@@ -745,7 +781,7 @@ export default function ChatPage() {
                           { id: "blame_game", label: "Blame", icon: "👉" },
                           { id: "roast", label: "Roast", icon: "🔥" },
                         ].map((s) => (
-                          <button key={s.id} onClick={() => setStyle(s.id)} 
+                          <button key={s.id} onClick={() => handleStyleChange(s.id)} 
                             className="rounded-md px-2 py-1 text-[10px] font-medium transition-all flex items-center gap-1"
                             style={{ 
                               background: style === s.id ? "var(--warning)" : "transparent", 
@@ -780,7 +816,7 @@ export default function ChatPage() {
 
                   {/* Topic suggestions */}
                   <div className="space-y-2">
-                    {DEBATE_STARTERS.map((cat) => (
+                    {(DEBATE_STARTERS[style] || DEBATE_STARTERS.standard).map((cat) => (
                       <div key={cat.label}>
                         <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider px-0.5" style={{ color: "var(--foreground-muted)" }}>{cat.label}</p>
                         <div className="flex flex-wrap gap-1.5">
@@ -821,7 +857,9 @@ export default function ChatPage() {
         <div className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ background: "var(--surface)" }}>
           <div className="flex items-center gap-2.5 px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
             {sidebarToggle}
-            <span className="text-xs font-medium" style={{ color: "var(--foreground-muted)" }}>{conversationId ? "Conversation" : "New chat"}</span>
+            <span className="text-xs font-medium truncate flex-1" style={{ color: "var(--foreground-muted)" }}>
+              {messages.length > 0 ? messages[0].content.slice(0, 60) + (messages[0].content.length > 60 ? "\u2026" : "") : "New chat"}
+            </span>
             {voiceState === "speak" && <button onClick={stopAudio} className="ml-auto rounded-lg px-2.5 py-1 text-[10px] font-medium" style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)" }}>Stop audio</button>}
           </div>
           {error && (
@@ -896,7 +934,7 @@ export default function ChatPage() {
         )}
 
         {debateSession && (
-          <DebateSplitView session={debateSession} turns={debateTurns} activeAgent={activeAgent} debatePhase={debatePhase} />
+          <DebateSplitView session={debateSession} turns={debateTurns} activeAgent={activeAgent} debatePhase={debatePhase} debateStyle={style} />
         )}
 
         {/* Bottom progress bar */}

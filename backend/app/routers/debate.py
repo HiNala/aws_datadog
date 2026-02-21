@@ -353,7 +353,15 @@ def generate_turn(
             ))
             db.commit()
 
-        # Stream the completed turn to the client
+        # TTS settings vary by debate style
+        debate_style = getattr(session, "style", "standard")
+        voice = session.agent_a_voice if agent_key == "a" else session.agent_b_voice
+        tts_speed = 1.05
+        tts_pitch = 0
+        if debate_style == "rap_battle":
+            tts_speed = 1.18   # faster cadence for rap flow
+            tts_pitch = 2      # slightly higher energy / brightness
+
         yield _sse({
             "type": "text",
             "agent": agent_key,
@@ -366,7 +374,9 @@ def generate_turn(
             "latency_ms": latency_ms,
             "is_final": is_final,
             "next_agent": next_agent,
-            "voice": session.agent_a_voice if agent_key == "a" else session.agent_b_voice,
+            "voice": voice,
+            "tts_speed": tts_speed,
+            "tts_pitch": tts_pitch,
         })
         yield _sse({"type": "done"})
 

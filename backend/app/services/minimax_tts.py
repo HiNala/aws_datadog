@@ -133,6 +133,8 @@ class MiniMaxTTS:
         text: str,
         voice_id: str = VOICES["narrator"],
         speed: float = 1.05,
+        pitch: int = 0,
+        vol: float = 1.0,
     ) -> Iterator[bytes]:
         """
         Stream raw MP3 chunks. Uses speech-2.8-turbo for <250ms TTFA.
@@ -153,8 +155,8 @@ class MiniMaxTTS:
             "voice_setting": {
                 "voice_id": voice_id,
                 "speed": speed,
-                "vol": 1.0,
-                "pitch": 0,
+                "vol": vol,
+                "pitch": pitch,
             },
             "audio_setting": {
                 "format": "mp3",
