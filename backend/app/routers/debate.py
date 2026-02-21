@@ -5,12 +5,15 @@ Endpoints:
   POST /api/debate/start          — Create session, generate agent perspectives
   POST /api/debate/{id}/turn      — Generate + stream next debate turn (SSE)
   GET  /api/debate/{id}           — Retrieve full session with all turns
-  GET  /api/debate/sessions       — List recent debate sessions
+  GET  /api/debate/sessions/list  — List recent debate sessions
 
-DataDog Observability:
-  - workflow_span wrapping the full session creation
-  - task_span for perspective generation, DB ops
-  - llm_span for each agent turn with full token + latency metadata
+DataDog LLM Observability:
+  - workflow_span wraps the full session start and each debate turn
+  - llm_span wraps every LLM inference call so Datadog sees it as an LLM call:
+      - prompt_tokens / completion_tokens / total_tokens tracked per call
+      - input_data / output_data in role+content format
+      - session_id links all spans for a debate session together
+  - task_span for DB operations
 """
 
 import json
@@ -36,7 +39,7 @@ from app.services import debate_orchestrator
 from app.services.minimax_tts import DEBATE_VOICES
 from app.services.datadog_obs import (
     annotate,
-    annotate_llm_call,
+    llm_span,
     task_span,
     workflow_span,
 )
@@ -121,35 +124,65 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
 
     session_id = str(uuid.uuid4())
 
-    with workflow_span("debate-session-start"):
+    with workflow_span("debate-session-start", session_id=session_id):
         annotate(
             input_data=topic,
-            tags={"env": "hackathon", "ml_app": "opusvoice", "feature": "debate", "style": style},
+            tags={
+                "env": "hackathon",
+                "ml_app": "opusvoice",
+                "feature": "debate",
+                "style": style,
+                "session_id": session_id[:8],
+            },
         )
 
-        # ── Generate perspectives ──────────────────────────────────────────
-        with task_span("generate-perspectives"):
-            t0 = time.time()
-            try:
+        # ── Generate perspectives via LLM ──────────────────────────────────
+        # Wrapped in llm_span so Datadog tracks this as an LLM call with
+        # prompt_tokens / completion_tokens / total_tokens.
+        try:
+            with llm_span("perspective-generator", model_name="claude-sonnet-4", model_provider="aws_bedrock", session_id=session_id):
+                annotate(
+                    input_data=[{
+                        "role": "user",
+                        "content": f"Generate two contrasting debate perspectives for the topic: {topic} (style: {style})",
+                    }],
+                )
+
+                t0 = time.time()
                 perspectives = debate_orchestrator.generate_perspectives(topic, style=style)
-            except Exception as e:
-                logger.error("Perspective generation failed: %s", e)
-                raise HTTPException(status_code=502, detail=f"Failed to generate perspectives: {e}")
-            persp_latency = round((time.time() - t0) * 1000, 1)
+                persp_latency = round((time.time() - t0) * 1000, 1)
 
-        meta = perspectives.get("_meta", {})
-        annotate_llm_call(
-            input_messages=[{"role": "user", "content": f"Topic: {topic}"}],
-            output_text=json.dumps(perspectives),
-            model=meta.get("model", "unknown"),
-            input_tokens=meta.get("input_tokens", 0),
-            output_tokens=meta.get("output_tokens", 0),
-            latency_ms=meta.get("latency_ms", persp_latency),
-            conversation_id=session_id,
-        )
+                meta = perspectives.get("_meta", {})
+                in_tok = meta.get("input_tokens", 0)
+                out_tok = meta.get("output_tokens", 0)
+
+                # Output: the two agent profiles
+                output_summary = json.dumps({
+                    "agent_a": perspectives["agent_a"],
+                    "agent_b": perspectives["agent_b"],
+                })
+                annotate(
+                    output_data=[{"role": "assistant", "content": output_summary}],
+                    metadata={
+                        "model": meta.get("model", "unknown"),
+                        "style": style,
+                        "persp_latency_ms": persp_latency,
+                    },
+                    metrics={
+                        "prompt_tokens": float(in_tok),
+                        "completion_tokens": float(out_tok),
+                        "total_tokens": float(in_tok + out_tok),
+                        "latency_ms": persp_latency,
+                    },
+                )
+
+        except Exception as e:
+            logger.error("Perspective generation failed: %s", e)
+            annotate(tags={"error": "perspective_generation_failed", "error_message": str(e)[:100]})
+            raise HTTPException(status_code=502, detail=f"Failed to generate perspectives: {e}")
 
         # ── Persist session ────────────────────────────────────────────────
-        with task_span("db-create-debate-session"):
+        with task_span("db-create-debate-session", session_id=session_id):
             row = DebateSessionRow(
                 id=session_id,
                 topic=topic,
@@ -167,17 +200,17 @@ def start_debate(req: DebateStartRequest, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(row)
 
+        # Final workflow-level annotation
         annotate(
             output_data=f"A={perspectives['agent_a']['name']} | B={perspectives['agent_b']['name']}",
             tags={
                 "session_id": session_id[:8],
                 "num_turns": str(num_turns),
-                "model": meta.get("model", "unknown"),
+                "agent_a": perspectives["agent_a"]["name"],
+                "agent_b": perspectives["agent_b"]["name"],
             },
             metrics={
-                "perspective_latency_ms": persp_latency,
-                "input_tokens": float(meta.get("input_tokens", 0)),
-                "output_tokens": float(meta.get("output_tokens", 0)),
+                "perspective_latency_ms": meta.get("latency_ms", 0),
             },
         )
 
@@ -274,8 +307,10 @@ def generate_turn(
         # Signal immediately so the client knows generation has started
         yield _sse({"type": "thinking", "agent": agent_key, "turn": turn_number})
 
-        # Generate the turn text via LLM
-        with workflow_span(f"debate-turn-{turn_number}"):
+        # ── Generate the turn text via LLM ─────────────────────────────────
+        # Wrapped in workflow_span → llm_span so Datadog sees the full
+        # trace hierarchy with proper LLM classification and metrics.
+        with workflow_span(f"debate-turn-{turn_number}", session_id=session_id):
             annotate(
                 input_data=f"Turn {turn_number}: {agent_name}",
                 tags={
@@ -283,12 +318,28 @@ def generate_turn(
                     "turn": str(turn_number),
                     "agent": agent_key,
                     "feature": "debate",
+                    "style": getattr(session, "style", "standard"),
                 },
             )
 
+            t0 = time.time()
+
+            # Build a representative input for annotation (the context the agent sees)
+            last_text = history[-1]["text"] if history else session.topic
+            llm_input = [
+                {"role": "system", "content": f"{agent_name}: {agent_perspective}"},
+                {"role": "user", "content": last_text[:500]},
+            ]
+
             try:
-                t0 = time.time()
-                with task_span(f"llm-debate-turn-{turn_number}"):
+                with llm_span(
+                    f"debate-agent-{agent_key}",
+                    model_name="claude-sonnet-4",
+                    model_provider="aws_bedrock",
+                    session_id=session_id,
+                ):
+                    annotate(input_data=llm_input)
+
                     turn_result = debate_orchestrator.generate_turn(
                         topic=session.topic,
                         agent_name=agent_name,
@@ -298,7 +349,23 @@ def generate_turn(
                         turn_number=turn_number,
                         style=getattr(session, "style", "standard"),
                     )
-                latency_ms = round((time.time() - t0) * 1000, 1)
+
+                    in_tok = turn_result["input_tokens"]
+                    out_tok = turn_result["output_tokens"]
+                    annotate(
+                        output_data=[{"role": "assistant", "content": turn_result["text"]}],
+                        metadata={
+                            "model": turn_result["model"],
+                            "agent": agent_key,
+                            "agent_name": agent_name,
+                            "turn_number": turn_number,
+                        },
+                        metrics={
+                            "prompt_tokens": float(in_tok),
+                            "completion_tokens": float(out_tok),
+                            "total_tokens": float(in_tok + out_tok),
+                        },
+                    )
 
             except Exception as e:
                 logger.error("Debate turn %d generation failed: %s", turn_number, e)
@@ -306,21 +373,13 @@ def generate_turn(
                 yield _sse({"type": "error", "message": str(e)})
                 return
 
+            latency_ms = round((time.time() - t0) * 1000, 1)
             text = turn_result["text"]
             model = turn_result["model"]
             input_tokens = turn_result["input_tokens"]
             output_tokens = turn_result["output_tokens"]
 
-            # DataDog LLM Observability annotation
-            annotate_llm_call(
-                input_messages=[{"role": "user", "content": history[-1]["text"] if history else session.topic}],
-                output_text=text,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                latency_ms=latency_ms,
-                conversation_id=session_id,
-            )
+            # Annotate the workflow span with the turn summary
             annotate(
                 output_data=text[:200],
                 tags={
@@ -331,15 +390,13 @@ def generate_turn(
                     "is_final": str(is_final),
                 },
                 metrics={
-                    "input_tokens": float(input_tokens),
-                    "output_tokens": float(output_tokens),
                     "latency_ms": float(latency_ms),
                     "turn_number": float(turn_number),
                 },
             )
 
-        # Persist the turn to DB
-        with task_span("db-persist-debate-turn"):
+        # ── Persist the turn to DB ─────────────────────────────────────────
+        with task_span("db-persist-debate-turn", session_id=session_id):
             db.add(DebateTurnRow(
                 session_id=session_id,
                 turn_number=turn_number,

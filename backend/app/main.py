@@ -10,7 +10,7 @@ from app.db import init_db
 from app.migrations import run_migrations
 from app.routers import chat, health, tts
 from app.routers import conversations, metrics, debate
-from app.services.datadog_obs import setup_observability
+from app.services.datadog_obs import flush, setup_observability
 
 logging.basicConfig(
     level=logging.INFO,
@@ -65,6 +65,12 @@ async def startup():
     run_migrations()
     setup_observability()
     logger.info("=" * 60)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    logger.info("OpusVoice Backend shutting down — flushing Datadog spans")
+    flush()
 
 
 def get_uptime() -> float:
