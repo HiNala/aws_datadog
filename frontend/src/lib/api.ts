@@ -333,6 +333,17 @@ export async function getDebateSession(
   return apiFetch<DebateSessionDetail>(`/api/debate/${sessionId}`);
 }
 
+/** Delete a conversation and all its messages. */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Delete failed: ${res.status}`);
+  }
+}
+
 /** List recent debate sessions. */
 export async function listDebateSessions(limit = 10): Promise<{
   sessions: {

@@ -33,31 +33,51 @@ def list_conversations(
         .all()
     )
 
-    summaries: list[ConversationSummary] = []
-    for conv in rows:
-        msg_count = (
-            db.query(func.count(MessageRow.id))
-            .filter(MessageRow.conversation_id == conv.id)
-            .scalar()
-            or 0
-        )
-        last = (
-            db.query(MessageRow)
-            .filter(MessageRow.conversation_id == conv.id, MessageRow.role == "assistant")
-            .order_by(MessageRow.created_at.desc())
-            .first()
-        )
-        last_msg = last.content[:120] if last else None
+    if not rows:
+        return ConversationsResponse(conversations=[], total=total)
 
-        summaries.append(
-            ConversationSummary(
-                id=conv.id,
-                title=conv.title,
-                message_count=msg_count,
-                last_message=last_msg,
-                created_at=conv.created_at.isoformat() if conv.created_at else "",
+    conv_ids = [c.id for c in rows]
+
+    # ── Message counts in a single bulk query ────────────────────────────────
+    count_rows = (
+        db.query(MessageRow.conversation_id, func.count(MessageRow.id).label("cnt"))
+        .filter(MessageRow.conversation_id.in_(conv_ids))
+        .group_by(MessageRow.conversation_id)
+        .all()
+    )
+    counts = {r.conversation_id: r.cnt for r in count_rows}
+
+    # ── Last assistant message per conversation (single window-function query) ─
+    subq = (
+        db.query(
+            MessageRow.conversation_id,
+            MessageRow.content,
+            func.row_number()
+            .over(
+                partition_by=MessageRow.conversation_id,
+                order_by=MessageRow.created_at.desc(),
             )
+            .label("rn"),
         )
+        .filter(
+            MessageRow.conversation_id.in_(conv_ids),
+            MessageRow.role == "assistant",
+        )
+        .subquery()
+    )
+    last_rows = db.query(subq).filter(subq.c.rn == 1).all()
+    last_msgs = {r.conversation_id: r.content[:120] for r in last_rows}
+
+    summaries: list[ConversationSummary] = [
+        ConversationSummary(
+            id=conv.id,
+            title=conv.title,
+            message_count=counts.get(conv.id, 0),
+            last_message=last_msgs.get(conv.id),
+            created_at=conv.created_at.isoformat() if conv.created_at else "",
+        )
+        for conv in rows
+    ]
 
     return ConversationsResponse(conversations=summaries, total=total)
 
@@ -105,3 +125,18 @@ def get_conversation_messages(
         conversation_id=conversation_id,
         messages=messages,
     )
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(
+    conversation_id: str,
+    db: Session = Depends(get_db),
+):
+    """Delete a conversation and all its messages (cascade)."""
+    conv = db.query(ConversationRow).filter(ConversationRow.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    db.delete(conv)
+    db.commit()
+    logger.info("Deleted conversation %s", conversation_id[:8])

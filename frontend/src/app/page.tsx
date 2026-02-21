@@ -39,6 +39,15 @@ function fmt(n: number | null | undefined) {
   return n.toLocaleString();
 }
 
+function Skeleton({ className = "", style = {} }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <span
+      className={`inline-block animate-pulse rounded ${className}`}
+      style={{ background: "var(--surface-overlay)", ...style }}
+    />
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 const DD_SITE = "us5.datadoghq.com";
@@ -91,7 +100,7 @@ export default function DashboardPage() {
     { name: "Bedrock", ok: svc?.bedrock === "ok" },
     { name: "MiniMax TTS", ok: svc?.minimax === "ok" },
     { name: "Postgres", ok: svc?.database === "ok" },
-    { name: "Datadog", ok: health ? true : null },
+    { name: "Datadog", ok: svc ? svc.datadog === "ok" : null },
   ];
 
   const uptime = (() => {
@@ -135,10 +144,27 @@ export default function DashboardPage() {
                 {loading ? "Connecting\u2026" : health?.status === "ok" ? "All systems operational" : "Degraded"}
               </div>
 
+              {/* Manual refresh */}
+              <button
+                onClick={refresh}
+                aria-label="Refresh dashboard"
+                title="Refresh"
+                className="flex h-8 w-8 items-center justify-center rounded-lg transition-all"
+                style={{ color: "var(--foreground-muted)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4.99" />
+                </svg>
+              </button>
+
               <Link
                 href="/chat"
                 className="rounded-xl px-4 py-2 text-sm font-medium transition-all"
                 style={{ background: "var(--accent)", color: "#fff" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
               >
                 Chat
               </Link>
@@ -201,7 +227,10 @@ export default function DashboardPage() {
               ].map((m) => (
                 <div key={m.label} className="rounded-lg p-2.5" style={{ background: "var(--surface)" }}>
                   <p className="text-[10px] font-medium" style={{ color: "var(--foreground-muted)" }}>{m.label}</p>
-                  <p className="text-lg font-bold font-mono tabular-nums mt-0.5" style={{ color: m.color }}>{m.value}</p>
+                  {loading && !metrics
+                    ? <Skeleton className="mt-1 h-6 w-10" />
+                    : <p className="text-lg font-bold font-mono tabular-nums mt-0.5" style={{ color: m.color }}>{m.value}</p>
+                  }
                 </div>
               ))}
             </div>
@@ -253,9 +282,12 @@ export default function DashboardPage() {
               <h2 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--foreground-muted)" }}>
                 Datadog
               </h2>
-              <span className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: "var(--success)" }}>
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--success)" }} />
-                Connected
+              <span
+                className="flex items-center gap-1.5 text-[10px] font-medium"
+                style={{ color: loading ? "var(--foreground-muted)" : svc?.datadog === "ok" ? "var(--success)" : svc?.datadog === "warning" ? "var(--warning)" : "var(--error)" }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: loading ? "var(--foreground-muted)" : svc?.datadog === "ok" ? "var(--success)" : svc?.datadog === "warning" ? "var(--warning)" : "var(--error)" }} />
+                {loading ? "Checking\u2026" : svc?.datadog === "ok" ? "Connected" : svc?.datadog === "warning" ? "Key not set" : "Disconnected"}
               </span>
             </div>
             <div className="space-y-2">
@@ -273,12 +305,14 @@ export default function DashboardPage() {
                   rel="noopener noreferrer"
                   className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-all"
                   style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--foreground-muted)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
                 >
                   <div>
                     <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{link.label}</p>
                     <p className="text-[10px]" style={{ color: "var(--foreground-muted)" }}>{link.desc}</p>
                   </div>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-muted)" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-muted)" }} aria-hidden="true">
                     <path d="M7 17l10-10M7 7h10v10" />
                   </svg>
                 </a>
@@ -314,6 +348,8 @@ export default function DashboardPage() {
                     href="/chat"
                     className="flex items-center gap-3 px-4 py-3 transition-all"
                     style={{ borderBottom: i < debates.length - 1 ? "1px solid var(--border)" : "none" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{d.topic}</p>
@@ -355,6 +391,8 @@ export default function DashboardPage() {
                     href="/chat"
                     className="flex items-center gap-3 px-4 py-3 transition-all"
                     style={{ borderBottom: i < conversations.length - 1 ? "1px solid var(--border)" : "none" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-hover)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>{c.title}</p>
